@@ -1,0 +1,14 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-display: ui-serif, Georgia, Cambria, 'Times New Roman', serif;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
