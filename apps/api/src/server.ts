@@ -1,11 +1,24 @@
 import { buildApp } from './app.js';
-import { env } from './config/env.js';
+import { readServerConfig } from './config/env.js';
 
-const app = buildApp();
+const config = readServerConfig();
+const app = buildApp({ logger: { level: config.logLevel } });
+
+async function shutdown(signal: NodeJS.Signals): Promise<void> {
+  app.log.info({ signal }, 'shutting down');
+  await app.close();
+  process.exit(0);
+}
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.once(signal, () => {
+    void shutdown(signal);
+  });
+}
 
 try {
-  await app.listen({ host: env.host, port: env.port });
+  await app.listen({ host: config.host, port: config.port });
 } catch (error) {
-  app.log.error({ err: error }, 'failed to start server');
+  app.log.error(error);
   process.exit(1);
 }

@@ -2,37 +2,38 @@
   "name": "why-this-match",
   "version": "0.1.0",
   "private": true,
+  "description": "Why This Match — an independent prototype exploring transparent therapist matching.",
   "type": "module",
-  "description": "Independent prototype exploring transparent therapist matching.",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12.0"
   },
   "workspaces": [
     "apps/*"
   ],
   "scripts": {
-    "dev": "concurrently -n web,api -c cyan,magenta \"npm:dev:web\" \"npm:dev:api\"",
+    "dev": "concurrently --names api,web --prefix-colors yellow,cyan \"npm:dev:api\" \"npm:dev:web\"",
     "dev:web": "npm run dev --workspace @why-this-match/web",
     "dev:api": "npm run dev --workspace @why-this-match/api",
     "build": "npm run build --workspaces",
-    "start": "npm run start --workspace @why-this-match/api",
+    "preview:web": "npm run preview --workspace @why-this-match/web",
+    "test": "npm run test --workspaces",
     "typecheck": "npm run typecheck --workspaces",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "npm run test --workspaces",
-    "check": "npm run lint && npm run format:check && npm run typecheck && npm run test"
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
+    "@eslint/js": "^9.39.5",
     "concurrently": "^10.0.5",
-    "eslint": "^10.11.0",
-    "eslint-config-prettier": "^10.1.8",
+    "eslint": "^9.39.5",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",
-    "globals": "^17.12.0",
+    "globals": "^17.4.0",
     "prettier": "^3.9.9",
+    "prettier-plugin-tailwindcss": "^0.8.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.70.1"
   }

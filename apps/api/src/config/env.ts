@@ -1,71 +1,71 @@
-import { loadRootEnvFile } from './load-env-file.js';
+const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
 
-loadRootEnvFile();
+const NODE_ENVS = ['development', 'test', 'production'] as const;
 
-export type NodeEnv = 'development' | 'test' | 'production';
+export type LogLevel = (typeof LOG_LEVELS)[number];
 
-export interface AppConfig {
+export type NodeEnv = (typeof NODE_ENVS)[number];
+
+export interface ServerConfig {
   readonly nodeEnv: NodeEnv;
-  readonly isProduction: boolean;
   readonly host: string;
   readonly port: number;
-  /** Browser origins allowed to call the API. */
-  readonly corsOrigins: readonly string[];
-  readonly logLevel: string;
+  readonly logLevel: LogLevel;
 }
 
-const nodeEnvs: readonly NodeEnv[] = ['development', 'test', 'production'];
+const DEFAULTS = {
+  nodeEnv: 'development',
+  host: '127.0.0.1',
+  port: 4000,
+  logLevel: 'info',
+} as const satisfies ServerConfig;
 
-function readNodeEnv(): NodeEnv {
-  const value = process.env.NODE_ENV;
-
-  if (value === undefined || value === '') {
-    return 'development';
+function readEnum<T extends string>(
+  raw: string | undefined,
+  allowed: readonly T[],
+  fallback: T,
+  name: string,
+): T {
+  if (raw === undefined || raw.trim() === '') {
+    return fallback;
   }
 
-  if (!nodeEnvs.includes(value as NodeEnv)) {
-    throw new Error(`Invalid NODE_ENV: "${value}". Expected one of: ${nodeEnvs.join(', ')}.`);
+  const value = raw.trim() as T;
+  if (!allowed.includes(value)) {
+    throw new Error(`${name} must be one of: ${allowed.join(', ')}. Received "${raw}".`);
   }
 
-  return value as NodeEnv;
+  return value;
 }
 
-function readPort(): number {
-  const value = process.env.API_PORT;
-
-  if (value === undefined || value === '') {
-    return 4000;
+function readPort(raw: string | undefined, fallback: number): number {
+  if (raw === undefined || raw.trim() === '') {
+    return fallback;
   }
 
-  const port = Number(value);
-
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error(`Invalid API_PORT: "${value}". Expected an integer between 1 and 65535.`);
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0 || value > 65_535) {
+    throw new Error(`API_PORT must be an integer between 0 and 65535. Received "${raw}".`);
   }
 
-  return port;
+  return value;
 }
 
-function readCorsOrigins(): readonly string[] {
-  const value = process.env.API_CORS_ORIGIN;
-
-  if (value === undefined || value === '') {
-    return ['http://localhost:5173'];
-  }
-
-  return value
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter((origin) => origin.length > 0);
+function readHost(raw: string | undefined, fallback: string): string {
+  const value = raw?.trim();
+  return value === undefined || value === '' ? fallback : value;
 }
 
-const nodeEnv = readNodeEnv();
-
-export const env: AppConfig = Object.freeze({
-  nodeEnv,
-  isProduction: nodeEnv === 'production',
-  host: process.env.API_HOST || '127.0.0.1',
-  port: readPort(),
-  corsOrigins: readCorsOrigins(),
-  logLevel: process.env.API_LOG_LEVEL || 'info',
-});
+/**
+ * Reads server configuration from the environment. Every value has a safe default so
+ * the API can boot with no `.env` file at all. Invalid values fail loudly at start-up
+ * rather than surfacing as confusing runtime errors later.
+ */
+export function readServerConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
+  return {
+    nodeEnv: readEnum(env['NODE_ENV'], NODE_ENVS, DEFAULTS.nodeEnv, 'NODE_ENV'),
+    host: readHost(env['API_HOST'], DEFAULTS.host),
+    port: readPort(env['API_PORT'], DEFAULTS.port),
+    logLevel: readEnum(env['API_LOG_LEVEL'], LOG_LEVELS, DEFAULTS.logLevel, 'API_LOG_LEVEL'),
+  };
+}

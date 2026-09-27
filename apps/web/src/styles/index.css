@@ -1,14 +1,302 @@
+/* ==========================================================================
+   Why This Match — design tokens and base layer
+   --------------------------------------------------------------------------
+   Every colour, type size, radius, shadow and easing used in the product is
+   declared here. Components reference tokens (never raw values) so the whole
+   visual language can be retuned from this single file.
+
+   Reference: docs/design-system.md
+   ========================================================================== */
+
 @import 'tailwindcss';
 
+/* --------------------------------------------------------------------------
+   Fonts
+   Self-hosted (public/fonts) so the prototype makes no third-party requests.
+   Fraunces and Inter are both licensed under the SIL Open Font License 1.1.
+   -------------------------------------------------------------------------- */
+
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 300 600;
+  font-display: swap;
+  src: url('/fonts/fraunces-latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Fraunces';
+  font-style: italic;
+  font-weight: 300 600;
+  font-display: swap;
+  src: url('/fonts/fraunces-italic-latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 300 600;
+  font-display: swap;
+  src: url('/fonts/inter-latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 @theme {
-  --font-display: ui-serif, Georgia, Cambria, 'Times New Roman', serif;
+  /* ---------------------------------------------------------------- colour
+     Warm neutrals carry the interface; clay is used with intent, never
+     decoration-for-decoration's-sake. Text pairs are contrast-checked
+     against --color-canvas and --color-surface (see docs/design-system.md). */
+
+  --color-canvas: #f8f3ec;
+  --color-canvas-sunk: #f2ebe1;
+  --color-surface: #fffdf9;
+  --color-surface-quiet: #fbf6ef;
+
+  --color-ink: #2f2925;
+  --color-ink-muted: #6c6259;
+  --color-ink-faint: #857a70; /* decorative and large text only (3.6:1) */
+
+  --color-line: #e7ddd3;
+  --color-line-strong: #d9cbbc;
+
+  --color-clay-50: #fbf3ed;
+  --color-clay-100: #f4e4d8;
+  --color-clay-200: #e8d5c5;
+  --color-clay-300: #d9b69c;
+  --color-clay-400: #c98f68;
+  --color-clay-500: #b86f4a;
+  --color-clay-600: #a85e37;
+  --color-clay-700: #9e5832; /* primary action surface: 5.3:1 on --color-surface */
+  --color-clay-800: #7e4227;
+  --color-clay-900: #5f3019;
+
+  --color-sage-100: #e8eee5;
+  --color-sage-300: #b9c9b4;
+  --color-sage-500: #7e947a;
+  --color-sage-700: #55684f; /* positive text on --color-sage-100: 5.1:1 */
+
+  /* ----------------------------------------------------------- typography */
+  --font-display:
+    'Fraunces', 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif;
+  --font-sans:
+    'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+
+  /* Expressive, never shouty. Fraunces sets the emotional register; Inter keeps
+     long-form reading comfortable. */
+  --text-display: clamp(2.5rem, 1.55rem + 3.9vw, 4rem);
+  --text-display--line-height: 1.06;
+  --text-display--letter-spacing: -0.022em;
+
+  --text-title: clamp(1.875rem, 1.5rem + 1.5vw, 2.5rem);
+  --text-title--line-height: 1.16;
+  --text-title--letter-spacing: -0.018em;
+
+  --text-heading: 1.5rem;
+  --text-heading--line-height: 1.28;
+  --text-heading--letter-spacing: -0.012em;
+
+  --text-subheading: 1.1875rem;
+  --text-subheading--line-height: 1.45;
+
+  --text-lead: 1.125rem;
+  --text-lead--line-height: 1.65;
+
+  --text-body: 1rem;
+  --text-body--line-height: 1.7;
+
+  --text-small: 0.875rem;
+  --text-small--line-height: 1.6;
+
+  --text-micro: 0.75rem;
+  --text-micro--line-height: 1.5;
+
+  --text-label: 0.75rem;
+  --text-label--line-height: 1.4;
+  --text-label--letter-spacing: 0.14em;
+
+  --text-brand: 1.0625rem;
+  --text-brand--line-height: 1.2;
+  --text-brand--letter-spacing: -0.01em;
+
+  /* -------------------------------------------------------------- spacing
+     A 4px-rooted scale (Tailwind default) plus two rhythm tokens so page
+     structure stays consistent across every route. */
+  --spacing-page: clamp(1.25rem, 0.85rem + 1.9vw, 2.75rem);
+  --spacing-section: clamp(4rem, 2.75rem + 5vw, 7.5rem);
+  --spacing-measure: 62ch;
+
+  /* --------------------------------------------------------------- radii */
+  --radius-control: 0.625rem;
+  --radius-panel: 0.875rem;
+
+  /* ------------------------------------------------------------- shadows
+     Warm-tinted and low-contrast: shadows should suggest paper, not plastic. */
+  --shadow-whisper: 0 1px 2px rgb(47 41 37 / 0.04);
+  --shadow-soft: 0 1px 2px rgb(47 41 37 / 0.04), 0 10px 30px -18px rgb(47 41 37 / 0.18);
+
+  /* --------------------------------------------------------------- motion */
+  --ease-gentle: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
-html {
-  color-scheme: light;
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    /* Two very soft warm lights, anchored to the top of the document rather
+       than the viewport, which avoids `background-attachment: fixed` — it is
+       unreliable on mobile Safari. */
+    background-image:
+      radial-gradient(58rem 38rem at 8% -4rem, rgb(232 213 197 / 0.5), transparent 62%),
+      radial-gradient(46rem 34rem at 104% -6rem, rgb(226 216 199 / 0.45), transparent 58%);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    color: var(--color-ink);
+  }
+
+  /* Fraunces is a variable font with an optical size axis; letting the browser
+     pick the right optical size per size is what keeps it warm at 64px and
+     legible at 15px. */
+  .font-display {
+    font-optical-sizing: auto;
+  }
+
+  ::selection {
+    background-color: var(--color-clay-200);
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-clay-700);
+    outline-offset: 3px;
+  }
+
+  /* Inputs and controls inherit the product's voice rather than the OS's. */
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+  }
 }
 
-body {
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+@layer components {
+  /* Paper grain. Sits above the page and ignores pointer events. It is the
+     cheapest way to stop a warm background reading as flat plastic. */
+  .grain-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    pointer-events: none;
+    mix-blend-mode: multiply;
+    opacity: 0.22;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23g)'/%3E%3C/svg%3E");
+    background-size: 180px 180px;
+  }
+
+  /* A single, quiet entrance. Content fades and lifts a few pixels; nothing
+     bounces, nothing parallaxes. */
+  .route-enter {
+    animation: route-enter 420ms var(--ease-gentle) both;
+  }
+
+  @keyframes route-enter {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 8px, 0);
+    }
+
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Underline that draws in from the left, for quiet in-page links. */
+  .link-quiet {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-repeat: no-repeat;
+    background-position: 0 100%;
+    background-size: 0% 1px;
+    transition:
+      background-size 300ms var(--ease-gentle),
+      color 200ms var(--ease-gentle);
+  }
+
+  .link-quiet:hover,
+  .link-quiet:focus-visible {
+    background-size: 100% 1px;
+  }
+
+  /* Soft wash used behind focused, single-column moments (e.g. /start). */
+  .wash-quiet {
+    background-image: radial-gradient(
+      52rem 34rem at 50% -6%,
+      rgb(244 228 216 / 0.75),
+      transparent 66%
+    );
+  }
+
+  .skip-link {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    translate: -50% -150%;
+    z-index: 60;
+    border-radius: var(--radius-control);
+    background-color: var(--color-surface);
+    box-shadow: var(--shadow-soft);
+    padding: 0.625rem 1rem;
+    font-size: var(--text-small);
+    color: var(--color-ink);
+    transition: translate 200ms var(--ease-gentle);
+  }
+
+  .skip-link:focus-visible {
+    translate: -50% 0.75rem;
+  }
+
+  /* The second circle of the overlap mark multiplies with the first, so the
+     shared area reads as a genuinely deeper tone. */
+  .multiply {
+    mix-blend-mode: multiply;
+  }
+}
+
+/* Declared last and unlayered so it wins over every utility: people who ask
+   for reduced motion get the same calm interface, without the movement. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

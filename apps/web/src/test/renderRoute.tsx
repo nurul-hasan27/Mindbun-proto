@@ -1,9 +1,17 @@
-import { render } from '@testing-library/react';
-import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { routes } from '../routes/router';
+import { render, type RenderResult } from '@testing-library/react';
+import { createMemoryRouter, RouterProvider, type RouteObject } from 'react-router';
+import { routeConfig } from '../routes/router';
 
-/** Renders the real route tree at the given path using an in-memory router. */
-export function renderRoute(path: string) {
-  const router = createMemoryRouter(routes, { initialEntries: [path] });
-  return render(<RouterProvider router={router} />);
+type MemoryRouter = ReturnType<typeof createMemoryRouter>;
+
+/**
+ * Renders the real route tree at a given URL. Using the production config keeps
+ * layout, navigation and metadata honest in tests.
+ */
+export function renderRoute(initialPath: string): RenderResult & { router: MemoryRouter } {
+  const router = createMemoryRouter(routeConfig satisfies RouteObject[], {
+    initialEntries: [initialPath],
+  });
+
+  return Object.assign(render(<RouterProvider router={router} />), { router });
 }

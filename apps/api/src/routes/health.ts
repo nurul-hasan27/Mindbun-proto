@@ -1,12 +1,31 @@
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginCallback } from 'fastify';
 
-/** Successful health payload. */
+/** Body returned by `GET /health`. Phase 1 intentionally exposes nothing else. */
 export interface HealthResponse {
-  status: 'ok';
+  readonly status: 'ok';
 }
 
-export const healthRoutes: FastifyPluginAsync = async (app) => {
-  app.get('/health', async (): Promise<HealthResponse> => {
-    return { status: 'ok' };
-  });
+const healthResponseSchema = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', const: 'ok' },
+  },
+  required: ['status'],
+  additionalProperties: false,
+} as const;
+
+export const healthRoute: FastifyPluginCallback = (app, _options, done) => {
+  app.get(
+    '/health',
+    {
+      schema: {
+        summary: 'Liveness probe',
+        description: 'Returns a static ok payload. Phase 1 has no other endpoints.',
+        response: { 200: healthResponseSchema },
+      },
+    },
+    (): HealthResponse => ({ status: 'ok' }),
+  );
+
+  done();
 };

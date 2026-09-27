@@ -1,66 +1,91 @@
 import js from '@eslint/js';
-import globals from 'globals';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
-import prettier from 'eslint-config-prettier';
+import globals from 'globals';
 import tseslint from 'typescript-eslint';
+
+const typeScriptFiles = ['**/*.{ts,tsx,mts,cts}'];
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**'],
+    ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**', '**/*.woff2'],
   },
+
   js.configs.recommended,
-  ...tseslint.configs.recommendedTypeChecked,
+
+  /* ------------------------------------------------- plain JavaScript (config) */
   {
+    files: ['**/*.{js,mjs,cjs}'],
     languageOptions: {
+      sourceType: 'module',
+      globals: globals.node,
+    },
+  },
+
+  /* ------------------------------------------------------------- TypeScript
+     Strict and type-aware: Phase 1 has no escape hatches, and the compiler
+     settings in tsconfig.base.json are the source of truth. The type-aware
+     presets are scoped to TypeScript files so plain JavaScript config files
+     are linted without type information. */
+  ...tseslint.configs.strictTypeChecked.map((config) => ({ ...config, files: typeScriptFiles })),
+  ...tseslint.configs.stylisticTypeChecked.map((config) => ({ ...config, files: typeScriptFiles })),
+  {
+    files: typeScriptFiles,
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
       parserOptions: {
         projectService: true,
         tsconfigRootDir: import.meta.dirname,
       },
     },
     rules: {
-      '@typescript-eslint/no-explicit-any': 'error',
-      '@typescript-eslint/consistent-type-imports': 'error',
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-      eqeqeq: ['error', 'always'],
-      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      '@typescript-eslint/consistent-type-imports': [
+        'error',
+        { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
+      ],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+
+      /* Type-aware rules that fight ordinary React or Fastify patterns. */
+      '@typescript-eslint/no-unnecessary-condition': 'off',
+      '@typescript-eslint/no-confusing-void-expression': 'off',
+      '@typescript-eslint/no-misused-promises': [
+        'error',
+        { checksVoidReturn: { attributes: false } },
+      ],
+      '@typescript-eslint/restrict-template-expressions': [
+        'error',
+        { allowNumber: true, allowBoolean: true },
+      ],
     },
   },
+
+  /* ------------------------------------------------------------- web app */
   {
     files: ['apps/web/**/*.{ts,tsx}'],
-    languageOptions: {
-      globals: globals.browser,
-    },
+    ...reactHooks.configs.flat.recommended,
     plugins: {
-      'react-hooks': reactHooks,
+      ...reactHooks.configs.flat.recommended.plugins,
       'react-refresh': reactRefresh,
+      'jsx-a11y': jsxA11y,
     },
     rules: {
-      ...reactHooks.configs.recommended.rules,
-      'react-refresh/only-export-components': 'warn',
+      ...reactHooks.configs.flat.recommended.rules,
+      ...jsxA11y.flatConfigs.recommended.rules,
+      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      'jsx-a11y/no-autofocus': 'error',
+      'jsx-a11y/no-noninteractive-element-interactions': 'error',
     },
   },
+
+  /* ------------------------------------------------------------- api app */
   {
     files: ['apps/api/**/*.ts'],
-    languageOptions: {
-      globals: globals.node,
-    },
     rules: {
-      // The server entry point is expected to log startup details.
-      'no-console': 'off',
+      'no-console': 'error',
     },
   },
-  {
-    files: ['**/*.config.{ts,js}', 'eslint.config.js'],
-    languageOptions: {
-      globals: globals.node,
-    },
-  },
-  {
-    files: ['**/*.test.{ts,tsx}', '**/tests/**/*.{ts,tsx}'],
-    rules: {
-      'no-console': 'off',
-    },
-  },
-  prettier,
 );
