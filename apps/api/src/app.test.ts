@@ -37,6 +37,7 @@ describe('readServerConfig', () => {
       port: 4000,
       logLevel: 'info',
       corsOrigins: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+      databaseUrl: '',
     });
   });
 
@@ -47,6 +48,7 @@ describe('readServerConfig', () => {
       API_PORT: '8080',
       API_LOG_LEVEL: 'warn',
       API_CORS_ORIGIN: 'https://app.example, https://admin.example',
+      DATABASE_URL: 'postgresql://user:pass@localhost:5432/why_this_match',
     });
 
     expect(config).toEqual({
@@ -55,6 +57,7 @@ describe('readServerConfig', () => {
       port: 8080,
       logLevel: 'warn',
       corsOrigins: ['https://app.example', 'https://admin.example'],
+      databaseUrl: 'postgresql://user:pass@localhost:5432/why_this_match',
     });
   });
 
@@ -63,5 +66,8 @@ describe('readServerConfig', () => {
     expect(() => readServerConfig({ API_LOG_LEVEL: 'loud' })).toThrow(/API_LOG_LEVEL/);
     expect(() => readServerConfig({ NODE_ENV: 'staging' })).toThrow(/NODE_ENV/);
     expect(() => readServerConfig({ API_CORS_ORIGIN: ' , ' })).toThrow(/API_CORS_ORIGIN/);
+    expect(() => readServerConfig({ DATABASE_URL: 'mysql://localhost/db' })).toThrow(
+      /DATABASE_URL/,
+    );
   });
 });

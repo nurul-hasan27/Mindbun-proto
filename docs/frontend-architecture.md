@@ -52,16 +52,22 @@ meets a request.
 
 ### Routes
 
-| Route             | State       | Purpose                                   |
-| ----------------- | ----------- | ----------------------------------------- |
-| `/`               | implemented | The doorway                               |
-| `/start`          | implemented | Step 1: what you are looking for          |
-| `/intake`         | placeholder | Step 2: the questions                     |
-| `/matching`       | placeholder | Step 3: where a recommendation comes from |
-| `/recommendation` | placeholder | Step 4: one person, and the reasons       |
-| `/feedback`       | placeholder | Step 5: how it felt                       |
-| `/rematch`        | placeholder | Step 6: another attempt                   |
-| `*`               | implemented | A considered 404                          |
+| Route             | State       | Purpose                                    |
+| ----------------- | ----------- | ------------------------------------------ |
+| `/`               | implemented | The doorway                                |
+| `/start`          | implemented | Step 1: what you are looking for           |
+| `/intake`         | placeholder | Step 2: the questions                      |
+| `/matching`       | placeholder | Step 3: where a recommendation comes from  |
+| `/recommendation` | placeholder | Step 4: one person, and the reasons        |
+| `/feedback`       | placeholder | Step 5: how it felt                        |
+| `/rematch`        | placeholder | Step 6: another attempt                    |
+| `/therapists/:id` | implemented | One therapist profile, outside the journey |
+| `*`               | implemented | A considered 404                           |
+
+`/therapists/:id` deliberately sits **outside** the journey. A profile is something a
+recommendation will point at, so it is reached from there rather than from the journey itself; the
+header drops its "Start" link on that route rather than pretending it is the beginning, and
+`therapistPath(id)` is the only place a profile URL is built.
 
 ### The journey
 
@@ -126,23 +132,41 @@ Design decisions worth stating:
 - **No Axios.** The platform `fetch` plus 40 lines of `AbortController` covers everything needed,
   and the dependency would have brought more behaviour than the app requires.
 - **Responses are structurally checked where it matters.** `fetchHealthStatus` verifies the
-  payload really is a health response, so a misconfigured proxy becomes a calm error rather than a
-  broken screen — without pulling in a validation library.
-- **The API namespace is a constant.** `API_V1 = '/api/v1'` is used by the client and documented in
-  `apps/api/src/app.ts`, where the Fastify prefix lives. A change to one is a change to both.
+  payload really is a health response, and the therapist endpoints verify they got a page and a
+  profile, so a misconfigured proxy becomes a calm error rather than a crash three components away —
+  without pulling in a validation library.
+- **The API namespace is a constant.** `API_V1 = '/api/v1'` lives in `lib/api/version.ts` and is
+  documented against the Fastify prefix in `apps/api/src/app.ts`. A change to one is a change to both.
+
+### The therapist endpoints
+
+```ts
+getTherapists(filters?, client?, options?): Promise<TherapistPage>
+getTherapist(id, client?, options?): Promise<TherapistProfile>
+```
+
+Both take an optional `ApiClient`, so a test can pass a client backed by a stub `fetch`, and both
+structurally check what came back. A `404` stays a `404` on the client (`kind: 'http'`), which is
+what lets the profile page say "we don't have anyone at this address" rather than "something went
+wrong" — two situations that deserve different words.
 
 ### Where the types come from
 
 The backend owns the contract: each endpoint declares a JSON Schema that Fastify validates and
 serialises responses from (`apps/api/src/api/v1/schemas/`), and each declares the matching
-TypeScript interface. The client's `types.ts` mirrors that shape, and `health.test.ts` on both
-sides pins it: the API test asserts the response has exactly the fields the schema lists, and the
-client test rejects a payload that is missing any of them.
+TypeScript interface. The client's `types.ts` mirrors those shapes, and tests on both sides pin
+them: the API test asserts a response has exactly the fields the schema lists, and the client tests
+reject a payload missing any of them.
 
-A shared `packages/contracts` was considered and deliberately deferred. With one endpoint, the
-build ordering a shared TypeScript package would require is more machinery than the drift risk it
-removes. The trigger for introducing it is the second domain: when `intake` lands, both sides need
-more than a handful of shapes, and that is the moment to extract one package with a real build step.
+**Prisma's generated types never reach this side.** They stop at
+`apps/api/src/data/therapists/therapistView.ts`, which is why the frontend type-checks with no
+database and no generated client, and why the schema can be reshaped without moving the HTTP
+contract underneath anyone.
+
+A shared `packages/contracts` was considered and deliberately deferred. With one domain, the build
+ordering a shared TypeScript package would require is more machinery than the drift risk it removes.
+The trigger for introducing it is the second domain: when `intake` lands, both sides need more than
+a handful of shapes, and that is the moment to extract one package with a real build step.
 
 ## 6. State boundaries
 
@@ -150,12 +174,12 @@ more than a handful of shapes, and that is the moment to extract one package wit
 | ------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | Server data         | Nowhere persistent. `useApiResource` in the component that needs it | A remount re-fetches. There is no cache yet, and pretending otherwise would be a lie. |
 | One async resource  | `useApiResource(load, deps)`                                        | Derived `loading`, abortable, no global store                                         |
-| In-progress answers | The page that asks them (Phase 3)                                   | Survives navigation now that `<main>` is no longer remounted                          |
+| In-progress answers | The page that asks them (Phase 4)                                   | Survives navigation now that `<main>` is no longer remounted                          |
 | URL                 | The only state that survives a refresh                              | Deep links, back/forward, and shareable links all work for free                       |
 | Configuration       | `lib/api/config.ts`, read once at module load                       | Build-time constants, not runtime state                                               |
 
-There is no context, no store, and no cache in Phase 2. When several pages need the same data, the
-first honest step is to put it in a hook or the URL — not to reach for a global store.
+There is no context, no store, and no cache. When several pages need the same data, the first
+honest step is to put it in a hook or the URL — not to reach for a global store.
 
 ## 7. Loading and error states
 
@@ -166,15 +190,39 @@ Both are components, both speak the product's voice, and neither is used for dec
 - **`ErrorNote`** — a plain-language title, one sentence about what to do, an optional "Try again"
   action, and the technical detail inside a collapsed disclosure. `role="alert"` announces it when
   it appears.
-- **`DevStatus`** — the only client that calls the API in Phase 2. It lives in the footer, renders
-  only in a development build, and is the proof that client → CORS → Fastify → `/api/v1` works. No
-  visitor ever sees a connection badge.
+- **`DevStatus`** and **`DevSampleProfile`** — the only places the client calls the API outside a
+  page's own data. Both live in the footer, render only in a development build, and exist to prove
+  that client → CORS → Fastify → `/api/v1` → PostgreSQL works, and to make a real profile one click
+  away. No visitor ever sees a connection badge.
 
-## 8. Adding a real feature later
+## 8. A therapist profile
+
+`/therapists/:id` is the first page that fetches anything, and the first to have to answer a
+question this product should care about: _what does a person look like when we are describing them
+honestly?_
+
+Three decisions carry it:
+
+- **One person, in their own words.** The biography is prose they wrote, set as running text. The
+  structured attributes below it are their statements too — languages, areas of work, approach,
+  style, context — presented as labelled lists, not as tags, chips, or a data table.
+- **No photographs.** The monogram is two initials in a hairline ring. No real therapist has agreed
+  to have their image used here, and a stock portrait would turn a person into a catalogue entry,
+  which is the thing this product argues against.
+- **Nothing to score.** No match percentage, no rank, no reviews, no "best match", and no buttons
+  other than a way back. A test asserts those words never appear, so the page cannot drift into a
+  marketplace by accident.
+
+Availability is shown in the therapist's own timezone, named in words ("Local time in India Standard
+Time"), because those times are a fact about their wall clock rather than an instant, and converting
+them would imply a precision the matching calculation does not have yet.
+
+## 9. Adding a real feature later
 
 The intake flow is the first thing that will exercise this structure. In rough order:
 
-1. Add `src/api/v1/schemas/intake.ts` and `src/api/v1/routes/intake.ts` on the server.
+1. Add `src/api/v1/schemas/intake.ts` and `src/api/v1/routes/intake.ts` on the server, writing to
+   `Intake` and `ClientPreference`.
 2. Add a `src/lib/api/intake.ts` with `submitIntake()` and mirror the types.
 3. Add a page under `src/pages/`, give it its own local state, and render `<LoadingNote>` /
    `<ErrorNote />` around the request.

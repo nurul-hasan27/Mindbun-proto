@@ -13,6 +13,13 @@ export interface ServerConfig {
   readonly logLevel: LogLevel;
   /** Browser origins allowed to call this API, lowest priority first. */
   readonly corsOrigins: readonly string[];
+  /**
+   * PostgreSQL connection string. Empty when unset: the service still boots and
+   * the health endpoints still answer, while the data routes report that the
+   * store is unavailable. Failing the whole process would take the liveness
+   * probe down with it.
+   */
+  readonly databaseUrl: string;
 }
 
 const DEFAULTS = {
@@ -21,7 +28,21 @@ const DEFAULTS = {
   port: 4000,
   logLevel: 'info',
   corsOrigins: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+  databaseUrl: '',
 } as const satisfies ServerConfig;
+
+function readDatabaseUrl(raw: string | undefined): string {
+  if (raw === undefined || raw.trim() === '') {
+    return '';
+  }
+
+  const value = raw.trim();
+  if (!value.startsWith('postgresql://') && !value.startsWith('postgres://')) {
+    throw new Error('DATABASE_URL must be a postgresql:// connection string.');
+  }
+
+  return value;
+}
 
 function readEnum<T extends string>(
   raw: string | undefined,
@@ -88,5 +109,6 @@ export function readServerConfig(env: NodeJS.ProcessEnv = process.env): ServerCo
     port: readPort(env['API_PORT'], DEFAULTS.port),
     logLevel: readEnum(env['API_LOG_LEVEL'], LOG_LEVELS, DEFAULTS.logLevel, 'API_LOG_LEVEL'),
     corsOrigins: readOrigins(env['API_CORS_ORIGIN'], DEFAULTS.corsOrigins),
+    databaseUrl: readDatabaseUrl(env['DATABASE_URL']),
   };
 }

@@ -1,9 +1,7 @@
 import { apiClient, type ApiClient, type RequestOptions } from './client';
 import { ApiError } from './errors';
 import type { HealthStatus } from './types';
-
-/** The versioned application API namespace. Matches the Fastify route prefix. */
-export const API_V1 = '/api/v1';
+import { API_V1 } from './version';
 
 /**
  * Checks that a payload really is a health response before handing it to the

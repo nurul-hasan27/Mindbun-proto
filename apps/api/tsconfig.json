@@ -4,7 +4,13 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "lib": ["ES2023"],
-    "types": ["node"]
+    "types": ["node"],
+    /* The generated Prisma client imports its own modules with a `.ts` specifier,
+       because `tsx` (the dev runner) cannot resolve `./enums.js` to `enums.ts`.
+       These two options let tsc accept those specifiers and rewrite them to `.js`
+       on emit, so the built server runs on plain Node. */
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true
   },
-  "include": ["src", "vitest.config.ts"]
+  "include": ["src", "prisma", "vitest.config.ts", "prisma7.config.ts"]
 }

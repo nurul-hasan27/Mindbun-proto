@@ -6,6 +6,9 @@ dist/
 build/
 *.tsbuildinfo
 
+# generated database client (recreated by `npm install` and `npm run build`)
+apps/api/src/generated/
+
 # test output
 coverage/
 .vitest/

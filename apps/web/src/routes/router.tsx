@@ -8,6 +8,7 @@ import { NotFoundPage } from '../pages/NotFoundPage';
 import { RecommendationPage } from '../pages/RecommendationPage';
 import { RematchPage } from '../pages/RematchPage';
 import { StartPage } from '../pages/StartPage';
+import { TherapistProfilePage } from '../pages/TherapistProfilePage';
 
 /**
  * One route tree, shared by the app (browser router) and the tests (memory
@@ -30,6 +31,12 @@ export const routeConfig: RouteObject[] = [
       { path: 'recommendation', element: <RecommendationPage /> },
       { path: 'feedback', element: <FeedbackPage /> },
       { path: 'rematch', element: <RematchPage /> },
+
+      // Outside the client journey on purpose: a profile is something a
+      // recommendation will point at, and it is reached from there rather than
+      // from the journey itself. The journey indicator is hidden here too.
+      { path: 'therapists/:id', element: <TherapistProfilePage /> },
+
       { path: '*', element: <NotFoundPage /> },
     ],
   },

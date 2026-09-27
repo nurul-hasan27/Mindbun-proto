@@ -9,7 +9,14 @@ const typeScriptFiles = ['**/*.{ts,tsx,mts,cts}'];
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**', '**/*.woff2'],
+    ignores: [
+      '**/dist/**',
+      '**/coverage/**',
+      '**/node_modules/**',
+      '**/*.woff2',
+      // Prisma client output: generated, not ours to lint.
+      'apps/api/src/generated/**',
+    ],
   },
 
   js.configs.recommended,
@@ -81,11 +88,20 @@ export default tseslint.config(
     },
   },
 
-  /* ------------------------------------------------------------- api app */
+  /* ------------------------------------------------------------- api app
+     `no-console` applies to the service, where a stray log is a leak waiting to
+     happen. The seed is a command-line tool whose console *is* its output, so it
+     is exempt. */
   {
-    files: ['apps/api/**/*.ts'],
+    files: ['apps/api/src/**/*.ts'],
     rules: {
       'no-console': 'error',
+    },
+  },
+  {
+    files: ['apps/api/prisma/**/*.ts'],
+    rules: {
+      'no-console': 'off',
     },
   },
 );

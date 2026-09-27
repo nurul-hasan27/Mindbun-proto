@@ -145,6 +145,8 @@ Only what the product actually needs. Each is small, single-purpose, and token-d
 | `QuietButton`               | A real `<button>` in the same voice, for actions like "Try again"                 |
 | `JourneyIndicator`          | Six hairlines showing where you are. Decorative, never a link                     |
 | `JourneyPlaceholder`        | The shared shape of a step that does not exist yet, so five cannot drift apart    |
+| `Monogram`                  | A person's initials in a hairline ring. The product stores no photographs         |
+| `ProfileSection`            | One labelled, hairline-divided block of a profile, with a real heading            |
 | `LoadingNote`               | One quiet line and a hairline that breathes. The loading state for the product.   |
 | `ErrorNote`                 | A plain-language title, one way forward, and the technical detail tucked away     |
 | `DevStatus`                 | Development-only proof that the client can reach the API. Never in a build.       |
@@ -174,6 +176,16 @@ novelty or a running gag:
 Error states never lead with a technical message. Each failure kind maps to a plain sentence and
 one useful action; the status code and internal detail live in a collapsed disclosure, and in the
 console. The product does not show `ERR_CONNECTION_REFUSED`, stack traces, or raw JSON to a visitor.
+
+### People are not entries
+
+A therapist profile is a person, and it has to work without the visual shorthand of a directory. So:
+no stock portrait — a monogram of their initials in a hairline ring, because no real therapist has
+agreed to have their image used here. No score, no rank, no reviews, no star rating, no "best match"
+badge. No chips or pills carrying attributes: an area of work is a line of text, and a label above a
+list is a heading rather than a caption. The only action on the page is a way back.
+
+Those absences are enforced by a test, so the page cannot quietly become a marketplace later.
 
 ## 7. Motion
 

@@ -1,0 +1,346 @@
+// Why This Match — domain model.
+//
+// Reasoning for every entity, relationship and constraint lives in
+// docs/domain-model.md. Read that first; this file is the implementation of it.
+//
+// Two rules are load-bearing here:
+//   1. Matching attributes (languages, areas, approaches, styles, context,
+//      formats) are normalised lookup tables, never JSON columns, because the
+//      future "Why this match?" explanation is built from the *overlap* between
+//      a client's preferences and these attributes.
+//   2. Nothing sensitive is inferred. Contextual experience is explicitly
+//      structured therapist data, never derived from a name, a location, or
+//      free text.
+
+generator client {
+  provider               = "prisma-client"
+  output                 = "../src/generated/prisma"
+  runtime                = "nodejs"
+  moduleFormat           = "esm"
+  generatedFileExtension = "ts"
+  // The API dev server runs through tsx, which resolves real `.ts` paths.
+  // tsc rewrites these to `.js` on emit (see `rewriteRelativeImportExtensions`).
+  importFileExtension = "ts"
+}
+
+// Prisma 7 keeps the connection string out of the schema: the URL used by the
+// CLI lives in prisma7.config.ts, and the client receives a driver adapter
+// (see src/lib/prisma.ts).
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// People
+// ---------------------------------------------------------------------------
+
+/// Someone using the service. Deliberately carries no personal details: no
+/// name, no contact details, no demographics. Everything a person tells us
+/// lives in Intake and ClientPreference instead, where it can be reasoned about
+/// and, eventually, deleted.
+model Client {
+  id        String   @id @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  intakes      Intake[]
+  preferences  ClientPreference[]
+  availability ClientAvailability[]
+  feedback     Feedback[]
+
+  @@map("clients")
+}
+
+/// A therapist, as a person. The presentable and matchable attributes live in
+/// TherapistProfile so that this table stays a stable identity even if a
+/// profile is replaced or corrected.
+model Therapist {
+  id        String   @id @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile TherapistProfile?
+
+  @@map("therapists")
+}
+
+// ---------------------------------------------------------------------------
+// Therapist profile
+// ---------------------------------------------------------------------------
+
+/// Everything someone can learn about, or be matched on, for one therapist.
+///
+/// Each attribute here has a job to do later: the structured lists are what a
+/// recommendation is *explained* from, and the scalars are what a client reads
+/// before deciding.
+model TherapistProfile {
+  id                String   @id @default(uuid()) @db.Uuid
+  therapistId       String   @unique @db.Uuid
+  displayName       String
+  headline          String
+  bio               String
+  /// Human-readable place, e.g. "Bengaluru, India". Deliberately not
+  /// geocoded: this phase does not do geographic matching, and a coarse place
+  /// keeps the data smaller and less identifiable.
+  location          String
+  /// IANA zone name, e.g. "Asia/Kolkata". The single source of truth for when
+  /// this therapist's availability windows happen. Never a UTC offset.
+  timezone          String
+  /// Years in practice, as a plain number. A summary for a reader; not used for
+  /// scoring, because experience alone says very little about fit.
+  yearsOfExperience Int
+
+  therapist Therapist @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+
+  languages            Language[]
+  approaches           TherapeuticApproach[]
+  areasOfWork          AreaOfWork[]
+  communicationStyles  CommunicationStyle[]
+  contextualExperience ContextualExperience[]
+  sessionFormats       SessionFormat[]
+  availability         AvailabilityWindow[]
+
+  @@index([displayName])
+  @@map("therapist_profiles")
+}
+
+// ---------------------------------------------------------------------------
+// Shared vocabularies
+//
+// Every one of these is a curated list rather than a free string, so that a
+// match can be described in words the client recognises. The seed owns their
+// contents; nothing creates them at runtime yet.
+// ---------------------------------------------------------------------------
+
+model Language {
+  id   String @id @default(uuid()) @db.Uuid
+  /// ISO 639-1 code, e.g. "en", "hi", "bn".
+  code String @unique
+  name String
+
+  therapistProfiles TherapistProfile[]
+  clientPreferences  ClientPreference[]
+
+  @@map("languages")
+}
+
+/// How a therapist works. A description of method, not a claim about
+/// effectiveness: these are matching attributes, and none is better than
+/// another.
+model TherapeuticApproach {
+  id          String @id @default(uuid()) @db.Uuid
+  key         String @unique
+  name        String
+  description String
+
+  therapistProfiles TherapistProfile[]
+  clientPreferences  ClientPreference[]
+
+  @@map("therapeutic_approaches")
+}
+
+/// What someone brings to therapy. Life situations rather than diagnoses.
+model AreaOfWork {
+  id          String @id @default(uuid()) @db.Uuid
+  key         String @unique
+  name        String
+  description String
+
+  therapistProfiles TherapistProfile[]
+  clientPreferences  ClientPreference[]
+
+  @@map("areas_of_work")
+}
+
+/// How a therapist shows up in a room.
+model CommunicationStyle {
+  id          String @id @default(uuid()) @db.Uuid
+  key         String @unique
+  name        String
+  description String
+
+  therapistProfiles TherapistProfile[]
+  clientPreferences  ClientPreference[]
+
+  @@map("communication_styles")
+}
+
+/// Lived context a therapist has direct experience of, stated by them.
+///
+/// This is the only place such context exists, and it is always something the
+/// therapist declared. It is never inferred from a name, a place, or anything
+/// typed into an intake box.
+model ContextualExperience {
+  id          String @id @default(uuid()) @db.Uuid
+  key         String @unique
+  name        String
+  description String
+
+  therapistProfiles TherapistProfile[]
+  clientPreferences  ClientPreference[]
+
+  @@map("contextual_experiences")
+}
+
+model SessionFormat {
+  id   String @id @default(uuid()) @db.Uuid
+  key  String @unique
+  name String
+
+  therapistProfiles TherapistProfile[]
+  clientPreferences  ClientPreference[]
+
+  @@map("session_formats")
+}
+
+// ---------------------------------------------------------------------------
+// Availability
+// ---------------------------------------------------------------------------
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+/// A recurring weekly window, in the therapist's own timezone.
+///
+/// Times are minutes from local midnight rather than a timestamp or an offset:
+/// "Tuesday, 18:00–20:00 in Europe/London" is a fact about a wall clock, and
+/// storing it as anything else invites timezone confusion. Converting between
+/// zones is the future overlap calculation's job, not the database's.
+model AvailabilityWindow {
+  id                 String    @id @default(uuid()) @db.Uuid
+  therapistProfileId String    @db.Uuid
+  dayOfWeek          DayOfWeek
+  startMinute        Int
+  endMinute          Int
+
+  therapistProfile TherapistProfile @relation(fields: [therapistProfileId], references: [id], onDelete: Cascade)
+
+  @@index([therapistProfileId, dayOfWeek])
+  @@map("availability_windows")
+}
+
+// ---------------------------------------------------------------------------
+// Client preferences
+// ---------------------------------------------------------------------------
+
+/// How strongly a client wants something: a preference shapes the ranking, a
+/// requirement excludes. It matters from the very first recommendation, and it
+/// is far cheaper to add now than to retrofit onto a filled table later.
+enum PreferenceKind {
+  PREFERENCE
+  REQUIREMENT
+}
+
+/// One set of structured preferences. A client can have several — a private
+/// session, a session with a partner — which is why the selections hang off a
+/// row rather than sitting on the client itself.
+model ClientPreference {
+  id        String         @id @default(uuid()) @db.Uuid
+  clientId  String         @db.Uuid
+  kind      PreferenceKind @default(PREFERENCE)
+  /// Optional plain-language context, e.g. "I find it hard to start".
+  note      String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  languages            Language[]
+  areasOfWork          AreaOfWork[]
+  communicationStyles  CommunicationStyle[]
+  approaches           TherapeuticApproach[]
+  contextualExperience ContextualExperience[]
+  sessionFormats       SessionFormat[]
+
+  @@index([clientId])
+  @@map("client_preferences")
+}
+
+/// When a client can generally meet, in their own timezone. Mirrors
+/// AvailabilityWindow so the two sides of a future overlap calculation have the
+/// same shape.
+model ClientAvailability {
+  id          String    @id @default(uuid()) @db.Uuid
+  clientId    String    @db.Uuid
+  timezone    String
+  dayOfWeek   DayOfWeek
+  startMinute Int
+  endMinute   Int
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, dayOfWeek])
+  @@map("client_availability")
+}
+
+// ---------------------------------------------------------------------------
+// Intake and feedback
+// ---------------------------------------------------------------------------
+
+/// What a person wrote, in their own words, at a moment in time.
+///
+/// `rawText` is the most sensitive field in this system. It is stored because
+/// the product is built on someone's own words, and it is never logged, never
+/// sent to a third party, and never used as a matching signal in this phase.
+model Intake {
+  id        String   @id @default(uuid()) @db.Uuid
+  clientId  String   @db.Uuid
+  rawText   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, createdAt])
+  @@map("intakes")
+}
+
+enum MatchSentiment {
+  GOOD
+  MIXED
+  POOR
+}
+
+/// What a person thought of a therapist, in their own words and in ours.
+///
+/// `reason` is the part that matters for the product: a structured reason is
+/// what lets the next recommendation be different rather than merely different
+/// in appearance.
+model Feedback {
+  id          String          @id @default(uuid()) @db.Uuid
+  clientId    String          @db.Uuid
+  therapistId String          @db.Uuid
+  sentiment   MatchSentiment
+  reasonId    String?         @db.Uuid
+  /// Optional free text, in the client's own words.
+  text        String?
+  createdAt   DateTime        @default(now())
+
+  client  Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  reason  FeedbackReason? @relation(fields: [reasonId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, createdAt])
+  @@index([therapistId])
+  @@map("feedback")
+}
+
+/// The reason a match did not work, as a short curated list. Wording matters:
+/// these are shown to clients, so they describe a fit that did not happen
+/// rather than a failing of either person.
+model FeedbackReason {
+  id          String @id @default(uuid()) @db.Uuid
+  key         String @unique
+  name        String
+  description String
+
+  feedback Feedback[]
+
+  @@map("feedback_reasons")
+}

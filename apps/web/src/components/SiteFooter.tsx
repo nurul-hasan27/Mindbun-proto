@@ -1,4 +1,5 @@
 import { Container } from './Container';
+import { DevSampleProfile } from './DevSampleProfile';
 import { DevStatus } from './DevStatus';
 import { isDev } from '../lib/api';
 
@@ -15,7 +16,12 @@ export function SiteFooter() {
             Every therapist, quote and match in this prototype is fictional.
           </p>
         </div>
-        {isDev && <DevStatus />}
+        {isDev && (
+          <div className="flex flex-col gap-1">
+            <DevStatus />
+            <DevSampleProfile />
+          </div>
+        )}
       </Container>
     </footer>
   );

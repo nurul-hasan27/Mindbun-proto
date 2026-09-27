@@ -10,3 +10,8 @@ export const paths = {
 } as const;
 
 export type AppPath = (typeof paths)[keyof typeof paths];
+
+/** Builds a therapist profile path from an id. */
+export function therapistPath(id: string): string {
+  return `/therapists/${encodeURIComponent(id)}`;
+}

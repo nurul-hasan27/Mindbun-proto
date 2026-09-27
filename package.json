@@ -2,10 +2,10 @@
   "name": "why-this-match",
   "version": "0.1.0",
   "private": true,
-  "description": "Why This Match — an independent prototype exploring transparent therapist matching.",
+  "description": "Why This Match \u2014 an independent prototype exploring transparent therapist matching.",
   "type": "module",
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.18.0"
   },
   "workspaces": [
     "apps/*"
@@ -17,6 +17,7 @@
     "build": "npm run build --workspaces",
     "preview:web": "npm run preview --workspace @why-this-match/web",
     "test": "npm run test --workspaces",
+    "test:db": "npm run test:db --workspace @why-this-match/api",
     "typecheck": "npm run typecheck --workspaces",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

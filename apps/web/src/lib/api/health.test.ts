@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createApiClient } from './client';
-import { API_V1, fetchHealthStatus } from './health';
+import { fetchHealthStatus } from './health';
+import { API_V1 } from './version';
 import { stubFetch, type StubHandler } from '../../test/stubFetch';
 
 const BASE_URL = 'http://api.test:4000';
@@ -13,7 +14,7 @@ function clientReturning(handler: StubHandler) {
 const HEALTH_PAYLOAD = {
   status: 'ok',
   service: 'why-this-match-api',
-  version: '0.2.0',
+  version: '0.0.0-test',
   timestamp: '2026-09-28T10:00:00.000Z',
 } as const;
 

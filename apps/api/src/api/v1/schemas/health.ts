@@ -25,4 +25,4 @@ export const healthResponseSchema = {
 } as const;
 
 /** Kept in one place so the reported version cannot drift from the package. */
-export const serviceVersion = '0.2.0';
+export const serviceVersion = '0.3.0';
