@@ -142,15 +142,38 @@ Only what the product actually needs. Each is small, single-purpose, and token-d
 | `Wordmark`                  | Name plus a four-point mark; the same shape as the favicon                        |
 | `UnderlineMark`             | One hand-drawn clay stroke, used once, under the promise the product makes        |
 | `OverlapMark`               | The product idea as a diagram: two circles, the shared area in between            |
-| `SiteHeader` / `SiteFooter` | A name, one quiet link, and a footnote. Not chrome — a frame.                     |
+| `QuietButton`               | A real `<button>` in the same voice, for actions like "Try again"                 |
+| `JourneyIndicator`          | Six hairlines showing where you are. Decorative, never a link                     |
+| `JourneyPlaceholder`        | The shared shape of a step that does not exist yet, so five cannot drift apart    |
+| `LoadingNote`               | One quiet line and a hairline that breathes. The loading state for the product.   |
+| `ErrorNote`                 | A plain-language title, one way forward, and the technical detail tucked away     |
+| `DevStatus`                 | Development-only proof that the client can reach the API. Never in a build.       |
+| `SiteHeader` / `SiteFooter` | A name, your position, and a footnote. Not chrome — a frame.                      |
 
-Two decisions worth stating:
+Three decisions worth stating:
 
-- **`Button` and `ButtonLink` are separate components.** Choosing the right element for the job
-  (action vs. navigation) is an accessibility decision, not a styling one.
+- **`Button`, `ButtonLink` and `QuietButton` are separate components.** Choosing the right element
+  for the job (action vs. navigation) is an accessibility decision, not a styling one.
 - **An unavailable action is `aria-disabled`, not `disabled`.** It stays focusable, so keyboard
   and screen-reader users still discover that the step exists, and `aria-describedby` points at the
   sentence that explains why it is not ready yet.
+- **The journey indicator is a position, not a progress bar.** It is not interactive, makes no
+  claim about how far along anyone is, and carries the same information as text for anyone who
+  cannot see the marks.
+
+### Placeholders and empty states
+
+A step that does not exist yet says what the step will be **for**, never that it is "coming soon".
+The one honest sentence about the prototype's state is identical everywhere, so it never becomes a
+novelty or a running gag:
+
+> This step is not built yet. Nothing here is stored, and nothing is sent anywhere.
+
+### Error copy
+
+Error states never lead with a technical message. Each failure kind maps to a plain sentence and
+one useful action; the status code and internal detail live in a collapsed disclosure, and in the
+console. The product does not show `ERR_CONNECTION_REFUSED`, stack traces, or raw JSON to a visitor.
 
 ## 7. Motion
 
@@ -159,6 +182,7 @@ Motion exists to explain a change of page, never to entertain.
 | Interaction     | Treatment                                                               |
 | --------------- | ----------------------------------------------------------------------- |
 | Route change    | 420ms fade + 8px rise, `cubic-bezier(0.22, 0.61, 0.36, 1)`, played once |
+| Waiting         | A 1px hairline breathing between 35% and 100% opacity over 2.4s         |
 | Primary action  | 200ms colour + shadow, and a 1px lift on hover                          |
 | Quiet link      | 300ms underline draw from the left, 200ms colour                        |
 | Arrow           | 2px nudge on hover, 200ms                                               |
@@ -166,13 +190,14 @@ Motion exists to explain a change of page, never to entertain.
 
 Rules:
 
-- One entrance, and only on route change.
-- No bounce, no overshoot, no parallax, no scroll-triggered reveals, no looping animation, no
-  skeleton shimmer.
+- One entrance, and only on route change. It is played with the Web Animations API on the existing
+  element, never by remounting a page, so navigation cannot destroy state.
+- No bounce, no overshoot, no parallax, no scroll-triggered reveals, no skeleton shimmer.
 - Durations stay in the 160–420ms band; anything slower feels like waiting, which is the wrong
   feeling for this product.
 - `prefers-reduced-motion: reduce` collapses every animation and transition to ~0ms, declared last
-  and unlayered so it wins over all utilities.
+  and unlayered so it wins over all utilities — and the route entrance is skipped in JavaScript as
+  well, so nothing is even scheduled.
 
 ## 8. Accessibility
 
@@ -182,11 +207,15 @@ Rules:
 - Focus is always visible: `:focus-visible` outline in `clay-700`, 2px, 3px offset. Never removed.
 - Every link and button has an accessible name; decorative SVG is `aria-hidden`; the overlap
   diagram carries a text description in a visually hidden caption.
-- Colour is never the only signal — the overlap diagram, the unavailable button, and progress
+- Colour is never the only signal — the overlap diagram, the unavailable button, and the journey
   hairlines each carry shape or text as well.
+- The journey indicator is decorative and duplicated as text ("Step 3 of 6: Finding a fit"), so it
+  is never the only way to know where you are.
+- Error states announce themselves with `role="alert"`, lead with plain words, and keep the
+  technical detail behind a disclosure.
 - Text meets AA at every size in the scale (see the contrast table).
 - Touch targets are at least 44px tall on mobile; the hero action is ~52px.
 - Layouts are designed at 320, 390, 834 and 1440px. Small screens get a different composition
-  (single column, tighter label tracking, re-flowed list), not a shrunken desktop.
+  (single column, tighter label tracking, narrower journey marks), not a shrunken desktop.
 - Respects `prefers-reduced-motion`. Dark mode is not offered; `color-scheme` is declared `light`
   so form controls and scrollbars match the canvas.

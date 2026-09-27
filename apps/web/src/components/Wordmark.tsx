@@ -32,7 +32,7 @@ export function Wordmark({ className }: WordmarkProps) {
       )}
     >
       <SparkMark className="ease-gentle group-hover:text-clay-600 transition-colors duration-200" />
-      <span className="font-display text-brand">Why This Match</span>
+      <span className="font-display text-brand whitespace-nowrap">Why This Match</span>
     </Link>
   );
 }

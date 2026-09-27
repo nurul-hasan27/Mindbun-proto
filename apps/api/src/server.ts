@@ -2,7 +2,10 @@ import { buildApp } from './app.js';
 import { readServerConfig } from './config/env.js';
 
 const config = readServerConfig();
-const app = buildApp({ logger: { level: config.logLevel } });
+const app = buildApp({
+  logger: { level: config.logLevel },
+  corsOrigins: config.corsOrigins,
+});
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   app.log.info({ signal }, 'shutting down');

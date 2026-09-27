@@ -8,16 +8,6 @@ import { paths } from '../routes/paths';
 
 const INTAKE_NOTE_ID = 'intake-note';
 
-/** Two hairlines: the first step is filled, the rest are still to come. */
-function StepProgress() {
-  return (
-    <div className="flex items-center gap-2" aria-hidden="true">
-      <span className="bg-clay-400 h-px w-12" />
-      <span className="bg-line-strong h-px w-12" />
-    </div>
-  );
-}
-
 /** A still cursor. The prototype is a promise of where typing will happen. */
 function Caret() {
   return (
@@ -39,11 +29,8 @@ export function StartPage() {
     <section className="wash-quiet">
       <Container className="pt-14 pb-6 sm:pt-20">
         <div className="max-w-2xl">
-          <div className="flex items-center gap-4">
-            <StepProgress />
-            {/* A label, not a heading: this route has exactly one h1 below. */}
-            <Eyebrow>Step one</Eyebrow>
-          </div>
+          {/* The header carries the position; the page only needs a name for itself. */}
+          <Eyebrow>Step one</Eyebrow>
 
           <h1 className="font-display text-title mt-6 text-balance">
             Let’s start with what you’re looking for.

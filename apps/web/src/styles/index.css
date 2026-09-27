@@ -219,21 +219,22 @@
     background-size: 180px 180px;
   }
 
-  /* A single, quiet entrance. Content fades and lifts a few pixels; nothing
-     bounces, nothing parallaxes. */
-  .route-enter {
-    animation: route-enter 420ms var(--ease-gentle) both;
+  /* The route entrance itself is played with the Web Animations API by
+     `useRouteEntrance`, so navigating never remounts a page. What lives here is
+     the one other piece of ambient motion: a hairline that breathes while
+     something is being waited for. */
+  .loading-breathe {
+    animation: loading-breathe 2.4s var(--ease-gentle) infinite;
   }
 
-  @keyframes route-enter {
-    from {
-      opacity: 0;
-      transform: translate3d(0, 8px, 0);
+  @keyframes loading-breathe {
+    0%,
+    100% {
+      opacity: 0.35;
     }
 
-    to {
+    50% {
       opacity: 1;
-      transform: none;
     }
   }
 

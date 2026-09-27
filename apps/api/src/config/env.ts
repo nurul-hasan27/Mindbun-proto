@@ -11,6 +11,8 @@ export interface ServerConfig {
   readonly host: string;
   readonly port: number;
   readonly logLevel: LogLevel;
+  /** Browser origins allowed to call this API, lowest priority first. */
+  readonly corsOrigins: readonly string[];
 }
 
 const DEFAULTS = {
@@ -18,6 +20,7 @@ const DEFAULTS = {
   host: '127.0.0.1',
   port: 4000,
   logLevel: 'info',
+  corsOrigins: ['http://localhost:5173', 'http://127.0.0.1:5173'],
 } as const satisfies ServerConfig;
 
 function readEnum<T extends string>(
@@ -56,6 +59,23 @@ function readHost(raw: string | undefined, fallback: string): string {
   return value === undefined || value === '' ? fallback : value;
 }
 
+function readOrigins(raw: string | undefined, fallback: readonly string[]): readonly string[] {
+  if (raw === undefined || raw.trim() === '') {
+    return fallback;
+  }
+
+  const origins = raw
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+
+  if (origins.length === 0) {
+    throw new Error('API_CORS_ORIGIN must list at least one origin, or be left empty.');
+  }
+
+  return origins;
+}
+
 /**
  * Reads server configuration from the environment. Every value has a safe default so
  * the API can boot with no `.env` file at all. Invalid values fail loudly at start-up
@@ -67,5 +87,6 @@ export function readServerConfig(env: NodeJS.ProcessEnv = process.env): ServerCo
     host: readHost(env['API_HOST'], DEFAULTS.host),
     port: readPort(env['API_PORT'], DEFAULTS.port),
     logLevel: readEnum(env['API_LOG_LEVEL'], LOG_LEVELS, DEFAULTS.logLevel, 'API_LOG_LEVEL'),
+    corsOrigins: readOrigins(env['API_CORS_ORIGIN'], DEFAULTS.corsOrigins),
   };
 }
