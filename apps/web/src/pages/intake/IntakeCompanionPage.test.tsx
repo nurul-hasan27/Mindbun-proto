@@ -616,6 +616,29 @@ describe('accessibility and layout', () => {
     expect(screen.getByRole('button', { name: 'Send' })).toHaveAttribute('aria-disabled', 'true');
   });
 
+  it('does not let the speaker label run into the prose', async () => {
+    const user = userEvent.setup();
+    renderCompanion();
+    await ready();
+
+    await user.type(screen.getByRole('textbox'), 'A thought.');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await screen.findByText('What is the harder part of it?');
+
+    // "ASSISTANT" is nine letterspaced capitals and is the widest thing a turn contains.
+    // It is beside the prose on a wide screen and above it on a narrow one, because 5.25rem
+    // of a 320px line is 29% for a label, and truncating it to "ASSISTA…" is worse than
+    // either. jsdom has no layout, so this asserts the arrangement rather than the
+    // geometry; the journey script measures the real thing at all four widths.
+    const row = screen.getByText('What is the harder part of it?').closest('div');
+    const classes = row?.className ?? '';
+
+    expect(classes).toMatch(/grid-cols-1/);
+    expect(classes).toMatch(/sm:grid-cols-\[5\.25rem_1fr\]/);
+    // And nothing clips the label.
+    expect(classes).not.toMatch(/truncate/);
+  });
+
   it('names the composer and its controls in the reading order', async () => {
     const user = userEvent.setup();
     renderCompanion();

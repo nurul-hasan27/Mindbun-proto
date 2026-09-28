@@ -751,8 +751,8 @@ npm run build        # type-check and build both workspaces
 
 | Suite    | Count | What only it can catch                                  |
 | -------- | ----- | ------------------------------------------------------- |
-| API unit | 487   | What the endpoints refuse, and what they refuse to send |
-| Web      | 525   | What a person sees, and in what order they see it       |
+| API unit | 502   | What the endpoints refuse, and what they refuse to send |
+| Web      | 530   | What a person sees, and in what order they see it       |
 | Database | 81    | Whether the _history_ survives being written            |
 
 The database suite is mostly read-back rather than assertions about return values. A service
@@ -764,6 +764,12 @@ headless browser: every route at 320, 390, 834 and 1440px measuring `scrollWidth
 `clientWidth`, keyboard-only traversal with the computed focus ring read at every stop,
 `prefers-reduced-motion` verified to leave zero elements animating, and the network panel read
 to confirm no endpoint is called twice in a journey and that no free text reaches a request.
+
+Driving the page rather than the code is what found the defects worth naming. Three of the
+fixes in this phase are things no test could have predicted: a country name read as a language
+preference, a matcher shown a database key on the case page, and two sentences printed with two
+full stops in a row. Each was found by looking at the rendered page or the running API — and
+each is now pinned by a test, because a defect found once by hand is found once.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for how to run, and for the conventions.
 

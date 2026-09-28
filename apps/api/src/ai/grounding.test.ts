@@ -116,6 +116,30 @@ describe('a summary that invents something', () => {
    * vocabulary held `didn`, the summary was checked for `didnt`, and every summary quoting a
    * client's own stored reason was refused. Not a wrong answer — an inability to see one.
    */
+  /**
+   * Punctuation, because it is on a matcher's screen.
+   *
+   * The seeded reason names are sentences that already end in a full stop, so the summary
+   * printed "In an earlier search they said: The communication style didn't feel right.."
+   * The grounding check could not have caught this — the extra period is punctuation, and
+   * punctuation is not a claim. Only looking at the rendered page found it.
+   */
+  it('ends a quoted reason in exactly one full stop', () => {
+    const result = assertGroundedIn(
+      ok({
+        summary:
+          'They are looking for support around Work stress. Ananya Rao does not carry Exploratory.',
+        observations: [
+          "In an earlier search they said: The communication style didn't feel right.",
+        ],
+      }),
+      { ...CONTEXT, priorFeedback: ["The communication style didn't feel right."] },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.summary.observations[0]).not.toMatch(/\.\./);
+  });
+
   it('matches a case’s own apostrophes, which two tokenisers could not', () => {
     const withApostrophe: AiCaseContext = {
       ...CONTEXT,

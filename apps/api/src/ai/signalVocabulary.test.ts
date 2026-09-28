@@ -285,6 +285,25 @@ describe('the mock provider, as an interpreter', () => {
     expect(contexts).toHaveLength(2);
   });
 
+  it('never prints two full stops in a row, whatever it is quoting', async () => {
+    // The seeded reason names already end in one. Found by looking at the rendered case page,
+    // not by a test: the grounding check could not have caught it, because a second full stop
+    // is punctuation rather than a claim.
+    const context = {
+      needs: [{ category: 'Work with', label: 'Work stress' }],
+      hasRequirements: false,
+      suggestion: { name: 'Ananya Rao', reasons: ['They speak Hindi.'], notOffered: [] },
+      alternatives: [],
+      priorFeedback: ["The communication style didn't feel right."],
+    } as unknown as Parameters<typeof provider.summariseCase>[0];
+
+    const summary = await provider.summariseCase(context);
+
+    for (const line of [summary.summary, ...summary.observations, ...summary.tradeoffs]) {
+      expect(line).not.toMatch(/\.\./);
+    }
+  });
+
   it('lists kinds in the order the questions ask about them', async () => {
     const signals = await provider.extractSignals([
       {

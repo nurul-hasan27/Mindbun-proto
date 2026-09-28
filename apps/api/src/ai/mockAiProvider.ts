@@ -926,11 +926,22 @@ function summarise(context: AiCaseContext): AiCaseSummary {
   if (gaps.length === 0) {
     sentences.push(`${context.suggestion.name} matches everything that was asked for.`);
   } else {
-    sentences.push(
-      `${context.suggestion.name} does not carry ${list(
-        gaps.map((gap) => `${joinOr(gap.names)} (${lower(gap.category)})`),
-      )}.`,
-    );
+    /*
+     * One sentence per family, not one sentence listing all of them, and no family label.
+     *
+     * The first version read: "Arjun Sethi does not carry Career transitions, Relationships
+     * or Work stress (work with)." Three separate gaps joined as though they were
+     * alternatives to each other, with a storage-ish label tacked on the end. Both halves
+     * were wrong: a matcher reading it has to work out whether one gap or three is meant,
+     * and "work with" is a column name rather than a thing anyone says.
+     *
+     * The family is dropped because the case page beside this panel is grouped by family
+     * already, and the terms are named individually. A summary that repeats the grouping adds
+     * nothing a reader does not have, and costs a line of sentence.
+     */
+    for (const gap of gaps) {
+      sentences.push(`${context.suggestion.name} does not offer ${joinOr(gap.names)}.`);
+    }
   }
 
   const observations: string[] = [];
@@ -938,7 +949,7 @@ function summarise(context: AiCaseContext): AiCaseSummary {
 
   for (const gap of gaps) {
     observations.push(
-      `They asked for ${joinOr(gap.names)}, and ${context.suggestion.name} does not offer it.`,
+      `${joinOr(gap.names)} ${wasAskedFor(gap.names.length)} and ${context.suggestion.name} does not offer it.`,
     );
 
     // A tradeoff is only a tradeoff if someone covers the gap. Otherwise it is a
@@ -967,7 +978,10 @@ function summarise(context: AiCaseContext): AiCaseSummary {
   }
 
   for (const step of context.priorFeedback) {
-    observations.push(`In an earlier search they said: ${step}.`);
+    // The reason names are sentences that already end in a full stop, so an unconditional one
+    // here printed "…didn't feel right.." on a matcher's screen. Sentence-cased, then
+    // punctuated once.
+    observations.push(`In an earlier search they said: ${withFullStop(sentenceCase(step))}`);
   }
 
   if (observations.length === 0) {
@@ -979,6 +993,21 @@ function summarise(context: AiCaseContext): AiCaseSummary {
     observations: observations.slice(0, 5),
     tradeoffs: tradeoffs.slice(0, 3),
   };
+}
+
+/** Ends in exactly one full stop, whatever it arrived with. */
+function withFullStop(text: string): string {
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
+/** Capitalises the first letter, for quoting a reason mid-sentence. */
+function sentenceCase(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** "was asked for" or "were asked for", from the count rather than from hope. */
+function wasAskedFor(count: number): string {
+  return count === 1 ? 'was asked for' : 'were asked for';
 }
 
 function list(items: readonly string[]): string {

@@ -74,9 +74,25 @@ function Turn({ message }: { readonly message: AiMessage }) {
 
   return (
     <div
-      className={cx('border-line grid grid-cols-[3.25rem_1fr] gap-x-3 border-t py-6 sm:gap-x-5')}
+      /*
+       * Beside the prose above `sm`, above it below.
+       *
+       * "ASSISTANT" is nine characters of letterspaced small capitals. In a column it needs
+       * 5.25rem, and at 320px that is 29% of the line for a label — the prose wraps to
+       * nine words a line and reads worse than it needs to. A truncated "ASSISTA…" is worse
+       * still, because it is the word most likely to be about.
+       *
+       * So the two-column arrangement is the wide-screen form and the stacked one is the
+       * narrow form, which is what the rest of this product already does. The column is
+       * fixed rather than `auto` so the prose starts on one edge at every width instead of
+       * stepping sideways between turns.
+       */
+      className={cx(
+        'border-line grid grid-cols-1 gap-y-1 border-t py-5',
+        'sm:grid-cols-[5.25rem_1fr] sm:gap-x-5 sm:gap-y-0 sm:py-6',
+      )}
     >
-      <p className={cx('text-label pt-1 uppercase', fromUser ? 'text-ink-faint' : 'text-clay-700')}>
+      <p className={cx('text-label uppercase', fromUser ? 'text-ink-faint' : 'text-clay-700')}>
         {fromUser ? 'You' : 'Assistant'}
       </p>
 
