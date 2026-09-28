@@ -29,6 +29,16 @@ export function intakePath(question: string): string {
 export const intakeReviewPath = `${paths.intake}/review`;
 
 /**
+ * The conversation assistant, as a step in the intake.
+ *
+ * A path rather than a component the questions can toggle, so a refresh lands somebody back
+ * in the conversation with their draft intact — the same reason every question has its own
+ * URL. The nesting under `/intake` is what keeps it from ever being summoned from outside
+ * the flow.
+ */
+export const intakeCompanionPath = `${paths.intake}/companion`;
+
+/**
  * The internal reviewer's tool. Outside the client journey on purpose.
  *
  * Its own key rather than a parameter of some existing path, so that the journey's position

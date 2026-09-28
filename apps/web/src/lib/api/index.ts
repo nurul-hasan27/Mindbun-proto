@@ -9,6 +9,17 @@ export {
   requestRematchRecommendation,
   submitFeedback,
 } from './feedback';
+export {
+  requestAiExtraction,
+  requestAiTurn,
+  type AiExtraction,
+  type AiKnownAnswers,
+  type AiMessage,
+  type AiSuggestion,
+  type AiSignalCategory,
+  type AiSignalConfidence,
+  type SuggestionTarget,
+} from './ai';
 export { requestMatch, requestRecommendation } from './matches';
 export { getTherapist, getTherapists, type TherapistFilters } from './therapists';
 export {

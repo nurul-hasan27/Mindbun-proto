@@ -5,6 +5,7 @@ import { LanguageQuestion } from './LanguageQuestion';
 import { AvailabilityQuestion } from './AvailabilityQuestion';
 import { AnythingElseQuestion } from './AnythingElseQuestion';
 import { IntakeReviewPage } from './IntakeReviewPage';
+import { IntakeCompanionPage } from './IntakeCompanionPage';
 
 /**
  * The intake's own routes, nested under `/intake`.
@@ -30,6 +31,10 @@ export const intakeRoutes: RouteObject[] = [
       { path: 'sessions', element: <IntakeQuestionPage questionId="sessions" /> },
       { path: 'availability', element: <AvailabilityQuestion /> },
       { path: 'anything-else', element: <AnythingElseQuestion /> },
+      // The conversation assistant. Sited before the first question so it can be reached
+      // from the start page without passing through a question, and mounted *inside* the
+      // intake so the draft is the same object the questions read and write.
+      { path: 'companion', element: <IntakeCompanionPage /> },
       { path: 'review', element: <IntakeReviewPage /> },
     ],
   },
