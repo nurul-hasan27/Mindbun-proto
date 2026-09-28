@@ -4,10 +4,10 @@ import { paths } from '../routes/paths';
 import { expectSoundHeadingStructure } from '../test/headingStructure';
 import { renderRoute } from '../test/renderRoute';
 
-// The intake is built as of Phase 4, so it is no longer one of these.
+// The intake (Phase 4) and the recommendation (Phase 5) are both built, so neither
+// is one of these any more.
 const PLACEHOLDERS = [
   { path: paths.matching, title: /where a recommendation comes from/i },
-  { path: paths.recommendation, title: /one person, and the reasons why/i },
   { path: paths.feedback, title: /if it doesn’t feel right, say so/i },
   { path: paths.rematch, title: /another attempt, informed by you/i },
 ] as const;

@@ -10,6 +10,7 @@ import { ToggleAll } from '../../components/ToggleAll';
 import { useIntake } from '../../lib/intake/intakeContext';
 import {
   answer,
+  answerChoices,
   draftHasAnswer,
   nextQuestion,
   previousQuestion,
@@ -46,13 +47,13 @@ export function LanguageQuestion() {
 
   usePageMeta({ title: question.title });
 
-  // The vocabulary is fetched once, so its language list is stable for the life of
-  // the page; mapping it inside the memo keeps the filter from rebuilding on every
-  // keystroke of the query.
+  // From `choicesFor`, not straight off the vocabulary: the *order* is the point
+  // here, and it lives in one place. Reading `vocabulary.languages` directly gave
+  // the shortlist in whatever order the service returned — alphabetical, so the
+  // eight on screen ran Afrikaans to Gujarati and English was the fifth thing you
+  // had to scroll to find.
   const choices = useMemo<readonly Choice[]>(
-    () =>
-      vocabulary?.languages.map((language) => ({ code: language.code, label: language.name })) ??
-      [],
+    () => (vocabulary === null ? [] : answerChoices('language', vocabulary)),
     [vocabulary],
   );
 

@@ -138,6 +138,10 @@ export function createPrismaIntakeRepository(client: PrismaClient): IntakeReposi
           await client.clientPreference.create({
             data: {
               clientId: owner.id,
+              // Recorded rather than inferred later: this set *is* these answers,
+              // and a match made from an older intake must be explained by the
+              // answers that intake was given.
+              intakeId: intake.id,
               openToGuidance: request.openToGuidance,
               languages: { connect: languages },
               areasOfWork: { connect: areas },

@@ -220,6 +220,11 @@ async function upsertVocabularies(client: PrismaClient): Promise<VocabularyIds> 
 
 /** Wipes the domain tables, in an order foreign keys are happy with. */
 async function resetDomainData(client: PrismaClient): Promise<void> {
+  // Matches first, and explicitly, even though deleting an intake or a therapist
+  // would cascade to them. Reseeding should not depend on cascade behaviour that
+  // belongs to two other tables and can be changed by someone else.
+  await client.matchEvidence.deleteMany();
+  await client.match.deleteMany();
   await client.feedback.deleteMany();
   await client.intake.deleteMany();
   await client.clientAvailability.deleteMany();

@@ -1,5 +1,15 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The tests in this file drive the *whole* flow — seven questions, each one a real
+// click, then a review, then a save — through jsdom, which is roughly two orders of
+// magnitude slower than a browser. On an idle machine the slowest takes about 1.5s; in
+// a full parallel run it was regularly over 5s and the default per-test budget expired,
+// so the suite failed for no reason other than being busy.
+//
+// The budget is raised here rather than globally, because a slow test is a property of
+// this file and a global loosening would hide genuinely slow tests everywhere else.
+vi.setConfig({ testTimeout: 30_000 });
 import { expectSoundHeadingStructure } from '../../test/headingStructure';
 import { paths } from '../../routes/paths';
 import {
@@ -621,7 +631,7 @@ describe('sending', () => {
     expect(body['submissionId']).toEqual(expect.any(String));
   });
 
-  it('confirms warmly, and does not claim a match exists', async () => {
+  it('confirms warmly, and still does not claim a match exists', async () => {
     setup();
     await renderIntake(paths.intake);
 
@@ -636,8 +646,48 @@ describe('sending', () => {
     });
 
     expect(screen.getByText(/use what you’ve told us to look for therapists/i)).toBeInTheDocument();
-    expect(screen.getByText(/not built yet/i)).toBeInTheDocument();
+
+    // The search exists as of Phase 5, so this screen now says what will happen
+    // next — but it still must not say a person has been found, because at this
+    // point nobody has run the search, and the recommendation page is the only
+    // place that is allowed to name anyone.
+    expect(screen.getByText(/compare what you told us against/i)).toBeInTheDocument();
     expect(screen.queryByText(/we found|your match|matched you/i)).not.toBeInTheDocument();
+  });
+
+  it('leads onward to the recommendation, and nowhere else does', async () => {
+    setup();
+    await renderIntake(paths.intake);
+
+    await answerRequiredQuestions();
+    await reachReview();
+    await userEvent.setup().click(screen.getByRole('button', { name: /^Continue$/ }));
+
+    const onward = await screen.findByRole('link', { name: /see who may fit/i });
+
+    expect(onward).toHaveAttribute('href', paths.recommendation);
+  });
+
+  it('keeps a reference to what was stored, and nothing else', async () => {
+    setup();
+    await renderIntake(paths.intake);
+
+    await answerRequiredQuestions();
+    await reachReview();
+    await userEvent.setup().click(screen.getByRole('button', { name: /^Continue$/ }));
+
+    await waitFor(() => {
+      expect(sessionStorage.getItem('wtm.intake.receipt.v1')).not.toBeNull();
+    });
+
+    // The receipt is an identifier and a timestamp. A person's own words are
+    // gone from the browser the moment they are sent, and that must not quietly
+    // change to accommodate a later step.
+    const stored = sessionStorage.getItem('wtm.intake.receipt.v1') ?? '';
+    const typed = JSON.parse(stored) as Record<string, unknown>;
+
+    expect(Object.keys(typed).sort()).toEqual(['intakeId', 'receivedAt']);
+    expect(stored).not.toMatch(/overwhelmed|relationships|hindi/i);
   });
 
   it('forgets the draft once it has been sent', async () => {

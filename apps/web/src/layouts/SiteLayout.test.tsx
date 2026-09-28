@@ -90,11 +90,17 @@ describe('application shell', () => {
 
     await router.navigate(paths.start);
 
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
-        /start with what you’re looking for/i,
-      );
-    });
+    // A generous timeout: this waits for a navigation and a render, and on a loaded
+    // machine the default can expire for no reason other than being busy. The
+    // assertion underneath is the real one.
+    await waitFor(
+      () => {
+        expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+          /start with what you’re looking for/i,
+        );
+      },
+      { timeout: 5_000 },
+    );
 
     // Same DOM node: the layout was never remounted, so any state a page holds
     // would have survived.

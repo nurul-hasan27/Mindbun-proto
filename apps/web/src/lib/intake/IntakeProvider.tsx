@@ -11,6 +11,7 @@ import {
   loadDraft,
   releaseSubmissionId,
   saveDraft,
+  saveReceipt,
   sessionId,
   submissionId,
 } from './session';
@@ -83,6 +84,11 @@ export function IntakeProvider({ children }: { readonly children: ReactNode }) {
         // keeping someone's own words on the device for no reason.
         clearIntake();
         releaseSubmissionId();
+        // What is kept instead is the *reference* to what was stored — an
+        // identifier and a timestamp, no answers. The recommendation is a separate
+        // step that needs something to point at, including after a refresh, which
+        // is exactly when someone is most likely to come back to it.
+        saveReceipt({ intakeId: stored.intakeId, receivedAt: stored.receivedAt });
         setReceipt(stored);
         setStatus('sent');
         setSaving(false);

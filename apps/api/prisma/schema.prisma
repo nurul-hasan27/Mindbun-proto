@@ -20,7 +20,7 @@ generator client {
   generatedFileExtension = "ts"
   // The API dev server runs through tsx, which resolves real `.ts` paths.
   // tsc rewrites these to `.js` on emit (see `rewriteRelativeImportExtensions`).
-  importFileExtension = "ts"
+  importFileExtension    = "ts"
 }
 
 // Prisma 7 keeps the connection string out of the schema: the URL used by the
@@ -56,6 +56,7 @@ model Client {
   preferences  ClientPreference[]
   availability ClientAvailability[]
   feedback     Feedback[]
+  matches      Match[]
 
   @@map("clients")
 }
@@ -69,6 +70,7 @@ model Therapist {
   updatedAt DateTime @updatedAt
 
   profile TherapistProfile?
+  matches Match[]
 
   @@map("therapists")
 }
@@ -83,8 +85,8 @@ model Therapist {
 /// recommendation is *explained* from, and the scalars are what a client reads
 /// before deciding.
 model TherapistProfile {
-  id                String   @id @default(uuid()) @db.Uuid
-  therapistId       String   @unique @db.Uuid
+  id                String @id @default(uuid()) @db.Uuid
+  therapistId       String @unique @db.Uuid
   displayName       String
   headline          String
   bio               String
@@ -128,7 +130,7 @@ model Language {
   name String
 
   therapistProfiles TherapistProfile[]
-  clientPreferences  ClientPreference[]
+  clientPreferences ClientPreference[]
 
   @@map("languages")
 }
@@ -143,7 +145,7 @@ model TherapeuticApproach {
   description String
 
   therapistProfiles TherapistProfile[]
-  clientPreferences  ClientPreference[]
+  clientPreferences ClientPreference[]
 
   @@map("therapeutic_approaches")
 }
@@ -156,7 +158,7 @@ model AreaOfWork {
   description String
 
   therapistProfiles TherapistProfile[]
-  clientPreferences  ClientPreference[]
+  clientPreferences ClientPreference[]
 
   @@map("areas_of_work")
 }
@@ -169,7 +171,7 @@ model CommunicationStyle {
   description String
 
   therapistProfiles TherapistProfile[]
-  clientPreferences  ClientPreference[]
+  clientPreferences ClientPreference[]
 
   @@map("communication_styles")
 }
@@ -186,7 +188,7 @@ model ContextualExperience {
   description String
 
   therapistProfiles TherapistProfile[]
-  clientPreferences  ClientPreference[]
+  clientPreferences ClientPreference[]
 
   @@map("contextual_experiences")
 }
@@ -197,7 +199,7 @@ model SessionFormat {
   name String
 
   therapistProfiles TherapistProfile[]
-  clientPreferences  ClientPreference[]
+  clientPreferences ClientPreference[]
 
   @@map("session_formats")
 }
@@ -251,22 +253,35 @@ enum PreferenceKind {
 /// session, a session with a partner — which is why the selections hang off a
 /// row rather than sitting on the client itself.
 model ClientPreference {
-  id        String         @id @default(uuid()) @db.Uuid
-  clientId  String         @db.Uuid
-  kind      PreferenceKind @default(PREFERENCE)
+  id       String @id @default(uuid()) @db.Uuid
+  clientId String @db.Uuid
+
+  /// The intake whose answers produced this set.
+  ///
+  /// Nullable because a preference set predates this column, and deliberately
+  /// *not* inferred from a timestamp. Phase 4 replaces the client's single
+  /// preference set on every submission, so an older intake had no way to name the
+  /// answers it was given — and matching it against the newer set would produce a
+  /// confident explanation of something the person is no longer asking about. Two
+  /// intakes written in the same millisecond make any timestamp-based guess
+  /// arbitrary, so the link is stored instead.
+  intakeId String? @db.Uuid
+
+  kind           PreferenceKind @default(PREFERENCE)
   /// The person said they are not yet sure what kind of conversation they want.
   ///
   /// This is a real answer rather than an empty one, and it changes what a
   /// recommendation should do: show breadth instead of pretending to know. It
   /// deserves a column of its own instead of being inferred from an empty
   /// `communicationStyles` list, which would equally mean "skipped the question".
-  openToGuidance Boolean    @default(false)
+  openToGuidance Boolean        @default(false)
   /// Optional plain-language context, e.g. "I find it hard to start".
-  note      String?
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  note           String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  intake Intake? @relation(fields: [intakeId], references: [id], onDelete: SetNull)
 
   languages            Language[]
   areasOfWork          AreaOfWork[]
@@ -276,6 +291,7 @@ model ClientPreference {
   sessionFormats       SessionFormat[]
 
   @@index([clientId])
+  @@index([intakeId])
   @@map("client_preferences")
 }
 
@@ -306,9 +322,9 @@ model ClientAvailability {
 /// the product is built on someone's own words, and it is never logged, never
 /// sent to a third party, and never used as a matching signal in this phase.
 model Intake {
-  id        String   @id @default(uuid()) @db.Uuid
-  clientId  String   @db.Uuid
-  rawText   String
+  id       String @id @default(uuid()) @db.Uuid
+  clientId String @db.Uuid
+  rawText  String
 
   /// The browser's identifier for one submission attempt.
   ///
@@ -321,6 +337,9 @@ model Intake {
   updatedAt    DateTime @updatedAt
 
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  matches             Match[]
+  producedPreferences ClientPreference[]
 
   @@index([clientId, createdAt])
   @@map("intakes")
@@ -338,17 +357,17 @@ enum MatchSentiment {
 /// what lets the next recommendation be different rather than merely different
 /// in appearance.
 model Feedback {
-  id          String          @id @default(uuid()) @db.Uuid
-  clientId    String          @db.Uuid
-  therapistId String          @db.Uuid
+  id          String         @id @default(uuid()) @db.Uuid
+  clientId    String         @db.Uuid
+  therapistId String         @db.Uuid
   sentiment   MatchSentiment
-  reasonId    String?         @db.Uuid
+  reasonId    String?        @db.Uuid
   /// Optional free text, in the client's own words.
   text        String?
-  createdAt   DateTime        @default(now())
+  createdAt   DateTime       @default(now())
 
-  client  Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  reason  FeedbackReason? @relation(fields: [reasonId], references: [id], onDelete: SetNull)
+  client Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  reason FeedbackReason? @relation(fields: [reasonId], references: [id], onDelete: SetNull)
 
   @@index([clientId, createdAt])
   @@index([therapistId])
@@ -367,4 +386,193 @@ model FeedbackReason {
   feedback Feedback[]
 
   @@map("feedback_reasons")
+}
+
+// ---------------------------------------------------------------------------
+// Matching
+//
+// The matching engine's entire reasoning, persisted. Two tables, because a
+// candidate evaluation and the evidence behind it are genuinely different
+// things: the evaluation is one row per candidate, and the evidence is as many
+// rows as there are reasons.
+//
+// The important decisions here are documented in docs/matching-engine.md; the
+// three that shape the schema are:
+//
+//  1. A `Match` is a *candidate evaluation*, not the recommendation. Every
+//     therapist the engine considered gets a row, including the ones it
+//     eliminated and why. A recommendation is a row with `RECOMMENDED`; there
+//     is no separate table, because it would hold nothing but a pointer back
+//     here.
+//  2. Evidence stores *keys*, never prose. The sentences a client reads are
+//     generated from these keys at read time, so a stored match always renders
+//     in the current wording and a stored sentence can never drift away from
+//     the facts that produced it.
+//  3. `score` and `engineVersion` are internal. Neither is ever sent to a
+//     client: the score is an ordering aid, not a measure of a person, and
+//     exposing it would turn a recommendation into a leaderboard.
+// ---------------------------------------------------------------------------
+
+/// What happened to one candidate, and if it was recommended, the single one.
+enum MatchStatus {
+  /// Considered, satisfied every requirement, and is scored.
+  ELIGIBLE
+  /// Considered and set aside because a requirement was not met.
+  INELIGIBLE
+  /// The candidate the engine chose to show. At most one per intake.
+  RECOMMENDED
+}
+
+/// The attribute family an evidence item belongs to.
+///
+/// Deliberately not a clinical taxonomy: these are the seven families of
+/// structured, therapist-stated attribute the engine is allowed to compare.
+/// Nothing else may produce evidence, and nothing about diagnosis, condition or
+/// severity is represented anywhere in this model.
+enum MatchCategory {
+  AREA_OF_WORK
+  LANGUAGE
+  COMMUNICATION_STYLE
+  THERAPEUTIC_APPROACH
+  CONTEXTUAL_EXPERIENCE
+  SESSION_FORMAT
+  AVAILABILITY
+}
+
+/// Which sentence an evidence item licenses.
+///
+/// This is the whole of the explanation vocabulary. A sentence can only be
+/// written for one of these, and each one has exactly one meaning, so a client
+/// reading a sentence knows precisely which fact produced it. A new category of
+/// match needs a new value here before it can be explained at all — which is
+/// the point.
+enum MatchExplanation {
+  /// A language the client marked as needed, which this therapist speaks.
+  REQUIRED_LANGUAGE
+  /// A language the client would like, which this therapist speaks.
+  PREFERRED_LANGUAGE
+  /// A shared area of work.
+  AREA_OF_WORK
+  /// A shared way of communicating.
+  COMMUNICATION_STYLE
+  /// A shared way of working, described without ranking one above another.
+  THERAPEUTIC_APPROACH
+  /// Lived context this therapist stated they have direct experience of.
+  CONTEXTUAL_EXPERIENCE
+  /// A session format they offer that the client asked for.
+  SESSION_FORMAT
+  /// A real overlap between the two availabilities, converted across timezones.
+  AVAILABILITY_OVERLAP
+}
+
+/// One candidate, evaluated.
+model Match {
+  id          String @id @default(uuid()) @db.Uuid
+  clientId    String @db.Uuid
+  intakeId    String @db.Uuid
+  therapistId String @db.Uuid
+
+  /// Which algorithm produced this row, e.g. "v1".
+  ///
+  /// Stored on every row because matching logic will change: a result has to be
+  /// attributable to the rules that produced it, or it cannot be explained, and
+  /// a stale one cannot be recognised as stale.
+  engineVersion String
+
+  /// Internal compatibility figure used only to order candidates.
+  ///
+  /// Never sent to a client, never shown, and never described as a measure of a
+  /// person. It exists so that a *why* can be traced back to an *ordering*: read
+  /// the evidence and the arithmetic is checkable by hand.
+  score Int
+
+  status MatchStatus
+
+  /// Why this candidate was set aside, as a key rather than a sentence. Null
+  /// when the candidate was eligible. A row with no reason is not possible: the
+  /// engine writes one of the two or the other.
+  rejectionCode String?
+
+  createdAt DateTime @default(now())
+
+  client    Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  intake    Intake          @relation(fields: [intakeId], references: [id], onDelete: Cascade)
+  therapist Therapist       @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+  evidence  MatchEvidence[]
+
+  /// An intake is evaluated exactly once.
+  ///
+  /// The engine is deterministic, so re-running it on the same answers could not
+  /// produce a different result; recording a second set of rows would imply it
+  /// might, and would make "what did we decide, and when" unanswerable. This
+  /// constraint is also the whole of the duplicate-submission safety: a retry
+  /// cannot write twice, because twice is not a shape this table has.
+  @@unique([intakeId, therapistId])
+  @@index([intakeId, status])
+  @@index([clientId, createdAt])
+  @@index([therapistId])
+  @@map("matches")
+}
+
+/// One reason, in structured form.
+///
+/// An evidence row is self-contained on purpose: reading it must never require
+/// going back to the intake or the profile to work out what it meant. That is
+/// what makes a stored match able to answer "why did you recommend this?" years
+/// later, and what makes it testable: the explanation is a function of these
+/// rows and nothing else.
+model MatchEvidence {
+  id      String @id @default(uuid()) @db.Uuid
+  matchId String @db.Uuid
+
+  category MatchCategory
+  /// Whether this signal was required of the candidate or merely preferred.
+  /// Required items are what eliminate; preferred items only score.
+  kind     PreferenceKind
+
+  /// The vocabulary key the *client* asked for, e.g. "hi".
+  ///
+  /// For availability, a canonical description of the client's window in their
+  /// own timezone. For a required "at least one of these" rule, the rule key —
+  /// so several evidence rows can share it and still be distinct.
+  clientKey String
+
+  /// The vocabulary key the *therapist* offers, e.g. "hi".
+  ///
+  /// For availability, the same window converted into the therapist's timezone.
+  therapistKey String
+
+  explanation MatchExplanation
+
+  /// How much this counted towards the internal score, in tenths. Internal only.
+  weight Int
+
+  /// The overlap found, in the client's own local time.
+  ///
+  /// Populated for `AVAILABILITY` evidence and null for everything else, so a
+  /// row's shape is unambiguous from its category alone — the invariant is
+  /// asserted by a test rather than left to a reader to infer.
+  overlapDayOfWeek   DayOfWeek?
+  overlapStartMinute Int?
+  overlapEndMinute   Int?
+
+  /// The overlap in the therapist's local time, for the same absolute interval.
+  therapistOverlapDayOfWeek   DayOfWeek?
+  therapistOverlapStartMinute Int?
+  therapistOverlapEndMinute   Int?
+
+  /// Whether this overlap holds in both seasons or only one. Two records of the
+  /// same wall-clock slot can be a single row, and saying which it is keeps the
+  /// "availability overlaps" claim honest.
+  seasonal Int @default(0)
+
+  /// Position in the engine's deterministic ordering of this candidate's
+  /// evidence, from 0. Stored so the row order of a read is fixed.
+  ordinal Int
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId, ordinal])
+  @@index([explanation])
+  @@map("match_evidence")
 }

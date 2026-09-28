@@ -125,3 +125,63 @@ export interface ApiErrorPayload {
   readonly error?: string;
   readonly message?: string;
 }
+
+// --------------------------------------------------------------------------
+// Matching
+//
+// Mirrors `apps/api/src/api/v1/schemas/matches.ts`.
+//
+// What is deliberately *not* here, and is not merely omitted by accident: a score,
+// a rank, a percentage, a list of anyone else, an engine version, a rejection
+// reason. The server's schemas declare the response with `additionalProperties:
+// false`, so a field added on that side fails the API's own tests rather than
+// reaching a browser. A product arguing against being a marketplace should make
+// that structurally true rather than a matter of remembering.
+// --------------------------------------------------------------------------
+
+export interface MatchReason {
+  /** The machine key the sentence came from, so it can be traced back to evidence. */
+  readonly key: string;
+  /** The full sentence. Never contains a number or a comparison. */
+  readonly sentence: string;
+  /** A short noun phrase, for a compact label. */
+  readonly detail: string;
+}
+
+export interface MatchedTherapist {
+  /** Present so the profile can be linked; the profile endpoint is already public. */
+  readonly id: string;
+  readonly displayName: string;
+  readonly headline: string;
+  readonly bio: string;
+  readonly location: string;
+  readonly timezone: string;
+  readonly yearsOfExperience: number;
+  readonly languages: readonly AttributeView[];
+  readonly areasOfWork: readonly AttributeView[];
+  readonly communicationStyles: readonly AttributeView[];
+  readonly approaches: readonly AttributeView[];
+  readonly contextualExperience: readonly AttributeView[];
+  readonly sessionFormats: readonly AttributeView[];
+  readonly availability: readonly AvailabilityWindowView[];
+}
+
+export interface MatchRecommendation {
+  readonly matchId: string;
+  /** ISO 8601, from the stored decision rather than from a clock in the browser. */
+  readonly decidedAt: string;
+  readonly therapist: MatchedTherapist;
+  readonly whyThisMatch: readonly MatchReason[];
+}
+
+export interface NoCandidateOutcome {
+  readonly outcome: 'no_candidate';
+  /** How many were considered. A fact, not a score. */
+  readonly considered: number;
+}
+
+export type MatchOutcome = MatchRecommendation | NoCandidateOutcome;
+
+export function isRecommendation(value: MatchOutcome): value is MatchRecommendation {
+  return 'therapist' in value;
+}

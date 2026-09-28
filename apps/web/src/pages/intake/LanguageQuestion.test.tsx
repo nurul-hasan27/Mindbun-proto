@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { expectSoundHeadingStructure } from '../../test/headingStructure';
 import { paths } from '../../routes/paths';
-import { renderIntake, stubIntakeApi, userEvent } from '../../test/intakeRender';
+import { renderIntake, stubIntakeApi, TEST_VOCABULARY, userEvent } from '../../test/intakeRender';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -28,6 +28,32 @@ describe('the language question', () => {
         name: /what language would you feel most comfortable/i,
       }),
     ).toBeInTheDocument();
+  });
+
+  it('shows the common languages first, whatever order the service returns them in', async () => {
+    // The service returns languages alphabetically, and the shortlist is only
+    // useful if the order is the product's. A fixture already in the right order
+    // cannot catch that being ignored, so this one is deliberately reversed.
+    const alphabetical = [...TEST_VOCABULARY.languages].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    stubIntakeApi({ vocabulary: { ...TEST_VOCABULARY, languages: alphabetical } });
+    await renderIntake(`${paths.intake}/language`);
+
+    const group = screen.getByRole('group', {
+      name: /what language would you feel most comfortable/i,
+    });
+    const shown = within(group)
+      .getAllByRole('checkbox')
+      .map((box) => box.closest('label')?.textContent ?? '');
+
+    // Alphabetical would be Bengali, English, French, Gujarati, Hindi…
+    expect(shown.slice(0, 4)).toEqual([
+      expect.stringContaining('English'),
+      expect.stringContaining('Hindi'),
+      expect.stringContaining('Bengali'),
+      expect.stringContaining('Tamil'),
+    ]);
   });
 
   it('shows the common languages first, and does not make everyone scroll for the rest', async () => {

@@ -1,5 +1,5 @@
 import { ArrowGlyph } from '../../components/ArrowGlyph';
-import { Button } from '../../components/Button';
+import { Button, ButtonLink } from '../../components/Button';
 import { Container } from '../../components/Container';
 import { IntakeProgress } from '../../components/IntakeProgress';
 import { LoadingNote } from '../../components/LoadingNote';
@@ -17,7 +17,7 @@ import {
 } from '../../lib/intake/questions';
 import { usePageMeta } from '../../lib/usePageMeta';
 import { useNavigate } from 'react-router';
-import { intakePath } from '../../routes/paths';
+import { intakePath, paths } from '../../routes/paths';
 
 interface SummaryLine {
   readonly id: QuestionId;
@@ -304,21 +304,30 @@ function IntakeConfirmation({
         </p>
 
         <p className="text-body text-ink-muted max-w-measure mt-6 text-pretty">
-          That search is the next part of this prototype, and it is not built yet. We have kept what
-          you shared, and we will not have looked at it in the meantime.
+          We compare what you told us against what each therapist has said about their own work. It
+          takes a moment, and it is worth waiting for: the reasons matter as much as the person.
         </p>
 
-        {receiptId !== null && (
-          <p className="text-small text-ink-faint mt-8">
-            Your answers were recorded. If you would like to see them again, you can start again
-            below.
-          </p>
+        {receiptId !== null ? (
+          <div className="mt-12 flex flex-col items-start gap-5">
+            {/*
+              "Who may fit", not "who we found". Nothing has been searched
+              yet at this point, so a link promising a specific person would be
+              claiming something the page behind it has not done. The hedge is
+              also the product's own — the loading copy says the same.
+            */}
+            <ButtonLink to={paths.recommendation} trailing={<ArrowGlyph />}>
+              See who may fit
+            </ButtonLink>
+            <QuietButton onClick={onStartAgain}>Start again</QuietButton>
+            <TextLink to="/">Back to the beginning</TextLink>
+          </div>
+        ) : (
+          <div className="mt-12 flex flex-col items-start gap-5">
+            <QuietButton onClick={onStartAgain}>Start again</QuietButton>
+            <TextLink to="/">Back to the beginning</TextLink>
+          </div>
         )}
-
-        <div className="mt-12 flex flex-col items-start gap-5">
-          <QuietButton onClick={onStartAgain}>Start again</QuietButton>
-          <TextLink to="/">Back to the beginning</TextLink>
-        </div>
 
         <p className="text-small text-ink-faint mt-10 max-w-md text-pretty">
           Nothing you wrote is kept in your browser now. This is a prototype with no account, so

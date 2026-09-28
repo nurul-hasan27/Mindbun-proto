@@ -28,7 +28,7 @@ export const journey = [
     id: 'recommendation',
     path: paths.recommendation,
     label: 'The recommendation',
-    state: 'planned',
+    state: 'ready',
   },
   { id: 'feedback', path: paths.feedback, label: 'How it felt', state: 'planned' },
   { id: 'rematch', path: paths.rematch, label: 'A second look', state: 'planned' },

@@ -110,9 +110,9 @@ are in [`frontend-architecture.md`](./frontend-architecture.md).
 | ----------------- | ----------- | ------------------------------------------- |
 | `/`               | implemented | The doorway                                 |
 | `/start`          | implemented | Step 1: what you are looking for            |
-| `/intake`         | placeholder | Step 2: the questions                       |
+| `/intake`         | implemented | Step 2: the questions                       |
 | `/matching`       | placeholder | Step 3: where a recommendation comes from   |
-| `/recommendation` | placeholder | Step 4: one person, and the reasons         |
+| `/recommendation` | implemented | Step 4: one person, and the reasons         |
 | `/feedback`       | placeholder | Step 5: how it felt                         |
 | `/rematch`        | placeholder | Step 6: another attempt                     |
 | `/therapists/:id` | implemented | One therapist profile (outside the journey) |
@@ -146,6 +146,10 @@ src/
 ├── routes/           unversioned infrastructure routes (/health)
 ├── data/therapists/  the repository port, its Prisma adapter, view types,
 │                     and profileDraft validation
+├── data/intake/      the intake port, its Prisma adapter, and hand-written
+│                     request validation that answers in sentences
+├── data/matching/    the matching engine, one module per pipeline stage, plus
+│                     its port and Prisma adapter
 ├── test/             test-database helpers
 └── api/
     └── v1/
@@ -155,11 +159,18 @@ src/
 
 - `buildApp()` returns an unstarted instance, which is what makes `app.inject()` testing possible
   without binding a port. `server.ts` is the only file that listens.
-- **The repositories are injected.** Routes depend on the `TherapistRepository` and
-  `IntakeRepository` interfaces, never on Prisma, so the whole API is testable without a database
+- **The repositories are injected.** Routes depend on the `TherapistRepository`, `IntakeRepository`
+  and `MatchRepository` interfaces, never on Prisma, so the whole API is testable without a database
   and the composition root (`app.ts`) is the only place that knows which implementation is in use.
   `buildApp()` with no repository wires ones that report `503`, so the process still starts and
-  liveness still answers without a database.
+  liveness still answers without a database. `/matches` is the first route needing two stores, which
+  is why the injection is now visible rather than hypothetical.
+- **The AJV validator is configured to reject rather than strip.** Fastify's default validator
+  _removes_ properties a schema marks as additional, which would mean a declared
+  `additionalProperties: false` quietly discards something a caller sent and then answers as if it
+  had not been sent. On `/matches` that would mean a caller naming a therapist and receiving a match
+  for someone else with no warning at all, so `removeAdditional: false` makes every declared schema
+  mean what it says.
 - **One error shape for the whole application API**, including the two failures that would
   otherwise answer in Fastify's own words: a body that is not JSON, and a body that does not match
   a schema. The request is still logged, so nothing is lost for whoever is debugging.
@@ -179,16 +190,24 @@ message }`.
 
 ### Two API surfaces, on purpose
 
-| Endpoint                     | Purpose                                     | CORS | Versioned |
-| ---------------------------- | ------------------------------------------- | ---- | --------- |
-| `GET /health`                | Infrastructure liveness for uptime checks   | no   | no        |
-| `GET /api/v1/health`         | Service identity and version for the client | yes  | yes       |
-| `GET /api/v1/therapists`     | A page of therapist summaries               | yes  | yes       |
-| `GET /api/v1/therapists/:id` | One full profile                            | yes  | yes       |
+| Endpoint                        | Purpose                                     | CORS | Versioned |
+| ------------------------------- | ------------------------------------------- | ---- | --------- |
+| `GET /health`                   | Infrastructure liveness for uptime checks   | no   | no        |
+| `GET /api/v1/health`            | Service identity and version for the client | yes  | yes       |
+| `GET /api/v1/therapists`        | A page of therapist summaries               | yes  | yes       |
+| `GET /api/v1/therapists/:id`    | One full profile                            | yes  | yes       |
+| `GET /api/v1/intake/vocabulary` | Everything an intake may ask about          | yes  | yes       |
+| `POST /api/v1/intakes`          | Store an intake and its preferences         | yes  | yes       |
+| `POST /api/v1/matches`          | One recommendation, and the reasons         | yes  | yes       |
 
 A load balancer can poll a cheap, version-free path while the client talks to a namespace that can
 evolve. `/api/v1` is where future domains land: `api/v1/routes/` gains a module per domain, and a
 future `/api/v2` can be registered beside it without touching v1.
+
+`POST /api/v1/matches` is the only endpoint whose response is deliberately _small_. It carries one
+therapist and a handful of reasons, and the schemas declare `additionalProperties: false` so a
+field added on that side fails the API's own tests rather than quietly reaching a browser. See
+[`matching-engine.md`](./matching-engine.md) for what is excluded and why.
 
 ### CORS
 
@@ -231,18 +250,28 @@ npm run db:studio    # browse the data
 ## 6. The request path, end to end
 
 ```
-GET /api/v1/therapists?take=3&language=hi
-  → { items: [ … 3 summaries … ], pagination: { total: 50, take: 3, skip: 0, hasMore: true } }
+POST /api/v1/intakes            { sessionId, submissionId, areasOfWork, languages, … }
+  → { intakeId, receivedAt }
+
+POST /api/v1/matches            { intakeId }
+  → { matchId, decidedAt, therapist: { …one person… }, whyThisMatch: [ { key, sentence, detail } ] }
+  → or { outcome: 'no_candidate', considered: 50 }
 ```
 
 ```
-useApiResource(signal => getTherapists({ take: 3 }, undefined, { signal }), [])
+useApiResource(signal => requestMatch(receipt.intakeId, undefined, { signal }), [intakeId])
   → derived state: loading | ready | error
       → ApiError { kind: 'network' | 'timeout' | 'aborted' | 'http' | 'parse' | 'config' }
 ```
 
-Verified end to end in a real browser: the development footer reports the API version, and the
-profile route renders a profile fetched from PostgreSQL through CORS.
+A note on what the matching request is _not_: it is not a `GET`, even though it is idempotent. A
+`POST` is what a caller reaching the server to have it _decide_ something looks like, and the
+idempotency that a `GET` would imply is guaranteed anyway — the server evaluates an intake once and
+returns the same stored decision to a retry.
+
+Verified end to end in a real browser at 320, 390, 834 and 1440px: Landing → Start → all seven
+questions → review → submit → recommendation, with the response body captured and checked for the
+absence of a score, a rank, another candidate, an identifier and anything the client wrote.
 
 ## 7. Testing
 
@@ -294,23 +323,28 @@ No CSS-in-JS, no component library, no state library, no HTTP library (the platf
 `AbortController` is enough), no validation framework, no migration tool beyond Prisma, no
 `clsx` (there is a three-line `cx`), no `dotenv` in the service (Node loads it), no icon package.
 
-## 10. Where Phase 5 attaches
+## 10. Where Phase 6 attaches
 
-The intake stored everything a first matching pass would need, and nothing was built ahead of it:
+The matching engine stored everything a reviewer screen needs, and nothing was built ahead of it:
 
-| Phase 5 concern    | Where it lands                                                                      |
-| ------------------ | ----------------------------------------------------------------------------------- |
-| Matching           | Reads `ClientPreference`; the first use of the vocabulary joins                     |
-| Timezone overlap   | `ClientAvailability` vs `AvailabilityWindow`, both in IANA zones                    |
-| Explaining a match | `Intake.rawText`, stored unanalysed since Phase 4, plus the keys it was stored with |
-| `openToGuidance`   | Read it to show breadth rather than pretending to know                              |
-| Recommendations    | A new `Recommendation` entity; `Feedback` gains a `recommendationId`                |
+| Phase 6 concern         | Where it lands                                                                                                                               |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| A reviewer screen       | `Match`, `MatchEvidence` and the engine's `CandidateTrace`, which is built and returned today and rendered by nothing                        |
+| Rematching              | The engine is pure and a run is immutable, so this is a _new intake_, not a mutation. `ClientPreference.intakeId` already distinguishes them |
+| Feedback                | `Feedback` gains a `matchId`, so a reason can be tied to the decision that produced it                                                       |
+| Geographic matching     | A new structured `TherapistProfile` attribute. Not a free-text location lookup                                                               |
+| Reviewer authentication | A new concern entirely. Nothing in this codebase assumes there is a logged-in user                                                           |
 
 Guardrails for those phases, so the visual language survives: no new colour outside the clay and
 sage ramps, no component that wears a card unless it is genuinely a surface, no endpoint without a
 schema and a test, no `any`, no free-text attribute that something has to match on later, and no
 client copy that talks about the person as a user being funnelled.
 
-The one thing Phase 5 must not skip: a match that cannot be explained from these fields is a match
-this product has no business making. Every key stored by the intake exists because some future
-sentence in a "Why this match?" was going to need it.
+The one thing Phase 6 must not skip: the internal score and the full candidate list are for a
+reviewer, never for a client. `CandidateTrace` is a separate type from `CandidateEvaluation`
+precisely so that adding it to a response is never a small change.
+
+The one thing Phase 5 established, and a later phase should not quietly undo: a match that cannot be
+explained from stored evidence is a match this product has no business making. Every key the intake
+stores exists because some sentence in a "Why we thought you might connect" was going to need it,
+and that is now a sentence someone can read.

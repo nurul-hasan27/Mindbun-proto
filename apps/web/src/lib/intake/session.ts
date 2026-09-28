@@ -18,6 +18,7 @@ import type { DayName } from '../api/types';
 const DRAFT_KEY = 'wtm.intake.draft.v1';
 const SESSION_KEY = 'wtm.intake.session.v1';
 const SUBMISSION_KEY = 'wtm.intake.submission.v1';
+const RECEIPT_KEY = 'wtm.intake.receipt.v1';
 
 /**
  * Storage can refuse: a private window, a full quota, a browser policy. Nothing
@@ -102,11 +103,63 @@ export function saveDraft(draft: IntakeDraft): void {
   write(DRAFT_KEY, JSON.stringify(draft));
 }
 
-/** Removes the draft and both identifiers. The end of someone's answers here. */
+/** Removes the draft, both identifiers, and the receipt. The end of someone's answers here. */
 export function clearIntake(): void {
   remove(DRAFT_KEY);
   remove(SESSION_KEY);
   remove(SUBMISSION_KEY);
+  remove(RECEIPT_KEY);
+}
+
+/**
+ * The reference to what was stored, so the recommendation can be asked for.
+ *
+ * Not part of the draft, and deliberately kept after the draft is cleared. The
+ * answers have left the browser; a receipt is not an answer, and the recommendation
+ * is a separate step that needs something to point at — including after a refresh,
+ * which is exactly when a person is most likely to come back to it.
+ *
+ * It holds an identifier and a timestamp. No answer, no words, nothing anyone
+ * wrote.
+ */
+export interface IntakeReceipt {
+  readonly intakeId: string;
+  readonly receivedAt: string;
+}
+
+export function saveReceipt(receipt: IntakeReceipt): void {
+  write(RECEIPT_KEY, JSON.stringify(receipt));
+}
+
+/** The stored receipt, or null when nothing has been submitted in this tab. */
+export function loadReceipt(): IntakeReceipt | null {
+  const stored = read(RECEIPT_KEY);
+
+  if (stored === null) {
+    return null;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(stored);
+
+    if (typeof parsed !== 'object' || parsed === null) {
+      return null;
+    }
+
+    const { intakeId, receivedAt } = parsed as Partial<IntakeReceipt>;
+
+    if (typeof intakeId !== 'string' || typeof receivedAt !== 'string') {
+      return null;
+    }
+
+    return isUuid(intakeId) ? { intakeId, receivedAt } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearReceipt(): void {
+  remove(RECEIPT_KEY);
 }
 
 export function hasStoredDraft(): boolean {

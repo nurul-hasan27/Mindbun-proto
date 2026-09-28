@@ -58,7 +58,7 @@ meets a request.
 | `/start`          | implemented | Step 1: what you are looking for           |
 | `/intake/*`       | implemented | Step 2: seven questions, and the review    |
 | `/matching`       | placeholder | Step 3: where a recommendation comes from  |
-| `/recommendation` | placeholder | Step 4: one person, and the reasons        |
+| `/recommendation` | implemented | Step 4: one person, and the reasons        |
 | `/feedback`       | placeholder | Step 5: how it felt                        |
 | `/rematch`        | placeholder | Step 6: another attempt                    |
 | `/therapists/:id` | implemented | One therapist profile, outside the journey |
@@ -248,7 +248,35 @@ terms the database actually holds. This is not a nicety: a phrase whose key the 
 heard of would be a 400 at submission, discovered after someone had answered five questions. The
 one list that _is_ the data rather than our copy of it is the language list.
 
-## 10. Adding the next feature
+## 10. The recommendation, in this architecture
+
+`/recommendation` is the second built step, and it is the one that decides whether the whole
+prototype is honest. Three things about it are architectural rather than visual.
+
+**It reuses the profile presentation rather than inventing its own.** `Monogram`, `ProfileSection`,
+the hairline between blocks and the display serif all come from Phase 3, because a recommendation
+that looked different from the profile it links to would be two design languages on one journey. The
+new pieces are `WhyThisMatch` (a labelled list of sentences) and the page shell.
+
+**The reasons arrive as sentences, not as data to render.** The server decides which handful of
+reasons to show and in what order, and phrases each one from stored evidence. The client renders
+`<li>{reason.sentence}</li>` and does no assembly, no formatting of times, and no choosing. That
+matters because a client that assembled its own explanations would be a second implementation of the
+explanation rules, free to drift from the first.
+
+**It never holds the answer.** The page keeps only a _reference_ to the intake — an identifier and a
+timestamp, in `sessionStorage` under `wtm.intake.receipt.v1`. The answers themselves are gone from
+the browser the moment they are sent, as they were in Phase 4; what survives is a pointer, so a
+refresh returns to the same recommendation and the receipt can be forgotten by "Start over". A
+test asserts the stored value contains exactly two keys and none of the words someone typed.
+
+The four states are `loading | ready | error` from `useApiResource`, plus two that are not API states
+and are handled before the request is made: no receipt at all ("there's nothing here to explain
+yet"), and a stored run that recommended nobody ("we couldn't find someone who fits all of the
+things you marked as important"). The second is a `200`, not an error, because nobody qualifying is
+an answer to the question that was asked.
+
+## 11. Adding the next feature
 
 The recommendation step is the next thing to exercise this structure. In rough order:
 

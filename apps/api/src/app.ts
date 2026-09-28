@@ -4,6 +4,8 @@ import { v1Routes } from './api/v1/routes/index.js';
 import type { LogLevel } from './config/env.js';
 import type { IntakeRepository } from './data/intake/intakeRepository.js';
 import { createPrismaIntakeRepository } from './data/intake/prismaIntakeRepository.js';
+import type { MatchRepository } from './data/matching/matchRepository.js';
+import { createPrismaMatchRepository } from './data/matching/prismaMatchRepository.js';
 import { createPrismaTherapistRepository } from './data/therapists/prismaTherapistRepository.js';
 import type { TherapistRepository } from './data/therapists/therapistRepository.js';
 import { DataStoreUnavailableError } from './data/storeErrors.js';
@@ -29,6 +31,7 @@ export interface BuildAppOptions {
    */
   readonly therapists?: TherapistRepository;
   readonly intakes?: IntakeRepository;
+  readonly matches?: MatchRepository;
 }
 
 /**
@@ -43,8 +46,18 @@ export function buildApp({
   corsOrigins = [],
   therapists,
   intakes,
+  matches,
 }: BuildAppOptions = {}): FastifyInstance {
-  const app = Fastify({ logger });
+  const app = Fastify({
+    logger,
+    // Fastify's default validator *strips* properties a schema marks as
+    // additional, rather than rejecting the request. That means a declared
+    // `additionalProperties: false` would quietly discard something a caller sent
+    // and then answer as if it had not been sent — which for this API would mean a
+    // caller naming a therapist and getting a match for someone else with no warning
+    // at all. Rejecting instead makes every declared schema mean what it says.
+    ajv: { customOptions: { removeAdditional: false } },
+  });
 
   // One error shape for the whole application API, including the two failures
   // that would otherwise answer in Fastify's own words: a body that is not JSON,
@@ -92,6 +105,7 @@ export function buildApp({
     prefix: API_PREFIX,
     therapists: therapists ?? unavailableTherapistRepository(),
     intakes: intakes ?? unavailableIntakeRepository(),
+    matches: matches ?? unavailableMatchRepository(),
   });
 
   return app;
@@ -109,6 +123,7 @@ export function buildAppWithStore({
     corsOrigins,
     therapists: createPrismaTherapistRepository(prisma),
     intakes: createPrismaIntakeRepository(prisma),
+    matches: createPrismaMatchRepository(prisma),
   });
 }
 
@@ -135,4 +150,18 @@ function unavailableIntakeRepository(): IntakeRepository {
   };
 
   return { readVocabulary: unavailable, submit: unavailable };
+}
+
+function unavailableMatchRepository(): MatchRepository {
+  const unavailable = (): never => {
+    throw new DataStoreUnavailableError('The match store is not available.');
+  };
+
+  return {
+    loadMatchableIntake: unavailable,
+    listCandidates: unavailable,
+    saveRun: unavailable,
+    findRun: unavailable,
+    readVocabularyNames: unavailable,
+  };
 }

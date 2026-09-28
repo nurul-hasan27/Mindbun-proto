@@ -26,6 +26,7 @@ not feel right, and receive a rematch based on that feedback.
 **Phase 2 — Application shell + frontend/backend contract.** Complete.
 **Phase 3 — Domain model + database foundation.** Complete.
 **Phase 4 — Client intake experience.** Complete.
+**Phase 5 — Explainable therapist matching engine.** Complete.
 
 Delivered so far:
 
@@ -34,9 +35,8 @@ Delivered so far:
   shadows, and motion — all in one stylesheet, all contrast-checked.
 - An application shell with a journey-aware header, a position indicator, and route transitions
   that do not destroy page state.
-- Seven journey routes: `/`, `/start` and the whole of `/intake` implemented; `/matching`,
-  `/recommendation`, `/feedback` and `/rematch` present as intentional placeholders for the flow
-  to come.
+- Seven journey routes: `/`, `/start`, the whole of `/intake` and `/recommendation` implemented;
+  `/matching`, `/feedback` and `/rematch` present as intentional placeholders for the flow to come.
 - **A complete intake** — seven questions, one at a time, in plain language rather than
   vocabulary names, with a review screen, an optional closing note, and honest handling of
   everything that can go wrong. Reasoning in [`docs/intake-flow.md`](docs/intake-flow.md).
@@ -53,10 +53,31 @@ Delivered so far:
   `/therapists/:id` that presents a person rather than a catalogue entry.
 - `GET /api/v1/intake/vocabulary` and `POST /api/v1/intakes`, so the questions are asked in terms
   of what the database actually holds, and a submission is validated, stored, and safe to retry.
+- **A matching engine that can explain itself.** Ten named, separately testable stages from a
+  stored intake to one recommendation, with integer-only scoring, a deterministic tie-break, and
+  evidence stored as keys rather than prose — so a stored match always reads in the current wording
+  and a stored sentence can never drift away from the facts that produced it. Availability is
+  compared as real absolute intervals across IANA timezones, twice a year, with daylight-saving and
+  midnight-crossing handled rather than approximated. Reasoning in
+  [`docs/matching-engine.md`](docs/matching-engine.md).
+- `POST /api/v1/matches`, which takes one intake reference and nothing else, and answers with one
+  person and the reasons. **No score, no rank, no percentage, no other candidates, no internal
+  weights, and no engine internals** — the response schema declares
+  `additionalProperties: false`, so adding one of those fails the API's own tests rather than
+  quietly reaching a browser.
+- **Every candidate the engine considered is stored**, including the ones it set aside and why, so
+  the decision stays inspectable. The engine has an internal score for ordering; it is never sent
+  anywhere and never described, and a person's eligibility to be shown here is not a judgement
+  about them.
+- **`/recommendation`**, which introduces one person, gives the reasons in plain sentences, links
+  to the full profile, and offers "This feels right" as a control that is present, focusable and
+  honest about not existing yet.
 - Tests, strict TypeScript, ESLint (type-aware + jsx-a11y), Prettier, and written documentation.
 
-Deliberately **not** built: matching, scoring, ranking, recommendation, an explanation of why
-anyone was recommended, feedback and rematch behaviour, geographic matching, and any AI service.
+Deliberately **not** built: rematching, feedback behaviour, a reviewer screen, geographic matching,
+clinical or diagnostic matching, accounts, payments, scheduling, and any AI service. The internal
+ordering figure is not clinically validated — it is a documented prototype heuristic, and the
+document says so.
 
 ## Tech stack
 
@@ -128,17 +149,22 @@ Browser (React)
                   └─ Prisma → PostgreSQL
 ```
 
-| Endpoint                     | Purpose                                        |
-| ---------------------------- | ---------------------------------------------- |
-| `GET /health`                | Infrastructure liveness: `{"status":"ok"}`     |
-| `GET /api/v1/health`         | Service identity, version and liveness         |
-| `GET /api/v1/therapists`     | A page of therapist summaries, ordered by name |
-| `GET /api/v1/therapists/:id` | One full profile, including availability       |
+| Endpoint                        | Purpose                                        |
+| ------------------------------- | ---------------------------------------------- |
+| `GET /health`                   | Infrastructure liveness: `{"status":"ok"}`     |
+| `GET /api/v1/health`            | Service identity, version and liveness         |
+| `GET /api/v1/therapists`        | A page of therapist summaries, ordered by name |
+| `GET /api/v1/therapists/:id`    | One full profile, including availability       |
+| `GET /api/v1/intake/vocabulary` | Everything an intake may ask about             |
+| `POST /api/v1/intakes`          | Store an intake and its preferences            |
+| `POST /api/v1/matches`          | One recommendation, and the reasons            |
 
 ```bash
 curl http://127.0.0.1:4000/api/v1/health
 curl 'http://127.0.0.1:4000/api/v1/therapists?take=3&language=hi'
 curl http://127.0.0.1:4000/api/v1/therapists/<id>
+curl -X POST http://127.0.0.1:4000/api/v1/matches \
+  -H 'content-type: application/json' -d '{"intakeId":"<id>"}'
 ```
 
 `/api/v1/therapists` accepts `take` (1–50), `skip`, `language` (ISO 639-1) and `area` (an
@@ -151,6 +177,13 @@ is declared as a JSON Schema that Fastify validates and serialises from.
 "Try again" after a failed save stores one intake rather than two. Unknown vocabulary keys, a
 missing language, a window that ends before it starts, and a note that is too long are all `400`
 with a sentence explaining which, and never with the value back.
+
+`POST /api/v1/matches` takes one thing — the intake reference — and nothing else. There is no way to
+ask "does this therapist match me?", because that would put the decision in the place it must not be.
+It answers `{ matchId, decidedAt, therapist, whyThisMatch }`, or `{ outcome: "no_candidate",
+considered }` — a `200`, because nobody qualifying is an answer rather than an error. It is safe to
+call repeatedly: an intake is evaluated once, enforced by a unique index rather than by
+application logic, and a retry returns the stored decision instead of searching again.
 
 ## Database
 
@@ -228,6 +261,7 @@ therapist routes report `503`. Liveness should not go down because a database is
 │   ├── frontend-architecture.md routing, state boundaries, API client
 │   ├── domain-model.md         entities, relationships, constraints
 │   ├── intake-flow.md          the questions, the mapping, the state, the payload
+│   ├── matching-engine.md      the pipeline, the weights, availability, evidence, limits
 │   ├── design-system.md        the visual language
 │   └── screenshots/
 └── package.json              npm workspaces root
@@ -235,13 +269,17 @@ therapist routes report `503`. Liveness should not go down because a database is
 
 ## Documentation
 
+- [`docs/matching-engine.md`](docs/matching-engine.md) — the ten-stage pipeline, how requirements
+  are derived, the weights and why they are not clinically validated, the timezone-correct
+  availability algorithm, the evidence model, how explanations are generated, how reasons are
+  prioritised, the tie-break, and the honest limitations.
 - [`docs/intake-flow.md`](docs/intake-flow.md) — every question, the human wording mapped to
   database keys, the state model, persistence, the API payload, and the privacy decisions.
 - [`docs/domain-model.md`](docs/domain-model.md) — the data model, and the reasoning behind it.
 - [`docs/frontend-architecture.md`](docs/frontend-architecture.md) — routing, layouts, the API
   client, and where state is allowed to live.
 - [`docs/architecture.md`](docs/architecture.md) — repository shape, the request path, testing
-  strategy, and the seams Phase 5 will plug into.
+  strategy, and the seams Phase 6 will plug into.
 - [`docs/design-system.md`](docs/design-system.md) — philosophy, tokens, components, motion,
   accessibility rules.
 
@@ -261,7 +299,18 @@ therapist routes report `503`. Liveness should not go down because a database is
   moment the intake is sent or someone chooses to start over.
 - **Nothing sensitive is inferred.** Contextual experience (diaspora, relocation, family
   expectations) is data a therapist states about themselves, never derived from a name, a place, or
-  anything a person wrote.
+  anything a person wrote. The matching engine is given two types — the client's chosen keys and a
+  therapist's declared attributes — and has no access to a name, a biography, a location, a note or
+  a clock, so it _cannot_ use them. That is a stronger guarantee than promising it will not.
+- **What someone wrote never reaches a match.** `Intake.rawText` and `ClientPreference.note` are
+  stored and left unparsed, by both the intake flow and the engine. The reasons a client reads are
+  built only from the keys they selected and the attributes a therapist declared.
+- **The recommendation response carries nothing that identifies the client.** No intake id, no
+  client id, no answers, no score, no count of who else was considered. Asserted against the wire,
+  not only against the schema.
+- **After the intake is sent, the browser keeps one reference and nothing else.** A receipt —
+  an identifier and a timestamp — so a refresh returns to the same recommendation. No answer, no
+  words. "Start over" removes it.
 
 ## Accessibility
 
@@ -275,8 +324,13 @@ Verified in a real browser, not assumed:
 - Body and secondary text pass WCAG AA; the accent action colour passes on `--color-surface` at 5.3:1.
 - All decorative SVG is `aria-hidden`; the one meaningful diagram carries a screen-reader caption.
 - `prefers-reduced-motion: reduce` removes every animation, verified with `getAnimations()`.
-- Layouts are designed at 320/390/834/1440px, not simply scaled down. The profile page and all
-  eight intake screens have no horizontal overflow at any of them.
+- Layouts are designed at 320/390/834/1440px, not simply scaled down. The profile page, all eight
+  intake screens and the recommendation have no horizontal overflow at any of them, verified by
+  measuring `scrollWidth` against `clientWidth` in a real browser.
+- The recommendation's reasons are a real `<ul>` of `<li>` inside a region labelled by its own
+  heading, so a screen reader can count them. The unavailable "This feels right" control is
+  `aria-disabled` rather than `disabled` — still focusable, still announced, and pointing at a
+  visible line that says why it does nothing.
 - Every choice in the intake is a real `<input type="checkbox">` or `type="radio">`, so arrow keys
   and Space work without being reimplemented. A chosen row is marked four ways — rule, tint, mark
   and type weight — so the state never depends on colour alone.
