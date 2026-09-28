@@ -92,13 +92,16 @@ describe('the browser bundle', () => {
     expect(contents).toContain('ai/intake/extract');
   });
 
-  it.skipIf(!IS_BUILT)('does not contain the workspace summary path outside the workspace client', () => {
-    const contents = FILES.map((file) => readFileSync(file, 'utf8')).join('\n');
+  it.skipIf(!IS_BUILT)(
+    'does not contain the workspace summary path outside the workspace client',
+    () => {
+      const contents = FILES.map((file) => readFileSync(file, 'utf8')).join('\n');
 
-    // Present is correct — the bundle is one application and the workspace ships in it, which
-    // is exactly why the boundary is documented as routing rather than security. What matters
-    // is that the *client journey* cannot reach it, and that is a structural test on the
-    // source: see `lib/api/workspaceBoundary.test.ts`.
-    expect(contents).toContain('/ai-summary');
-  });
+      // Present is correct — the bundle is one application and the workspace ships in it, which
+      // is exactly why the boundary is documented as routing rather than security. What matters
+      // is that the *client journey* cannot reach it, and that is a structural test on the
+      // source: see `lib/api/workspaceBoundary.test.ts`.
+      expect(contents).toContain('/ai-summary');
+    },
+  );
 });

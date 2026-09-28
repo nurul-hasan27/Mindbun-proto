@@ -52,6 +52,15 @@ const MIN_MESSAGES_BEFORE_SUMMARISING = 2;
 /** Below this many understood signals, another question is worth more than a summary. */
 const MIN_SIGNALS_TO_SUMMARISE = 2;
 
+/**
+ * How many suggestions of one kind are worth showing.
+ *
+ * Two, and the reasoning is in `limitPerCategory`. A third and fourth way of saying
+ * "something about work" crowd out the one thing that was said about a language, a format
+ * or a time — which is the part a person cannot guess the assistant has missed.
+ */
+const MAX_PER_CATEGORY = 2;
+
 // ---------------------------------------------------------------------------
 // The phrases a person might use.
 //
@@ -539,6 +548,14 @@ interface Suggestion {
   readonly key: string;
   readonly confidence: AiSignal['confidence'];
   readonly explanation: string;
+  /**
+   * How much evidence this rests on, as the length of the phrase that matched.
+   *
+   * Only used to decide what survives `limitPerCategory`, and never sent: a person's
+   * confidence in a suggestion should not depend on being able to see how a keyword matcher
+   * scored it.
+   */
+  readonly strength: number;
 }
 
 /** The whole of the interpretation. A pure function of what the person said. */
@@ -569,6 +586,7 @@ function suggest(said: string, vocabulary: IntakeVocabularyView): Suggestion[] {
 
     if (hit !== null) {
       add({
+        strength: hit.strength,
         category: 'area',
         key: area.key,
         confidence: hit.explicit ? 'high' : 'medium',
@@ -582,6 +600,7 @@ function suggest(said: string, vocabulary: IntakeVocabularyView): Suggestion[] {
 
     if (hit !== null) {
       add({
+        strength: hit.strength,
         category: 'communicationStyle',
         key: style.key,
         confidence: hit.explicit ? 'high' : 'medium',
@@ -597,6 +616,7 @@ function suggest(said: string, vocabulary: IntakeVocabularyView): Suggestion[] {
 
     if (hit !== null) {
       add({
+        strength: hit.strength,
         category: 'context',
         key: context.key,
         confidence: hit.explicit ? 'high' : 'medium',
@@ -610,6 +630,7 @@ function suggest(said: string, vocabulary: IntakeVocabularyView): Suggestion[] {
 
     if (hit !== null) {
       add({
+        strength: hit.strength,
         category: 'sessionFormat',
         key: format.key,
         confidence: hit.explicit ? 'high' : 'medium',
@@ -623,6 +644,7 @@ function suggest(said: string, vocabulary: IntakeVocabularyView): Suggestion[] {
 
     if (hit !== null) {
       add({
+        strength: hit.strength,
         category: 'language',
         key: language.code,
         confidence: hit.explicit ? 'high' : 'medium',
@@ -641,6 +663,7 @@ function suggest(said: string, vocabulary: IntakeVocabularyView): Suggestion[] {
     const when = describeWhen(part, days);
 
     add({
+      strength: 0,
       category: 'availability',
       key: formatAvailabilityHint({ part, days }),
       confidence: 'low',
@@ -655,6 +678,7 @@ function suggest(said: string, vocabulary: IntakeVocabularyView): Suggestion[] {
     )
   ) {
     add({
+      strength: 0,
       category: 'guidance',
       key: OPEN_TO_GUIDANCE_KEY,
       confidence: 'high',
@@ -662,8 +686,66 @@ function suggest(said: string, vocabulary: IntakeVocabularyView): Suggestion[] {
     });
   }
 
-  return out;
+  return limitPerCategory(out);
 }
+
+/**
+ * At most two of each kind, then the overall cap.
+ *
+ * Without this the list is an arbitrary subset: a long, rich description produces eleven
+ * suggestions, the cap keeps eight, and the three that fall off the end are whatever came
+ * last in vocabulary order. A person who wrote "I would rather speak Hindi" and did not see
+ * a language suggested had been told something untrue about what was understood — and a
+ * surplus line reporting "there was more" does not repair that, because the missing thing
+ * was not a rounding detail.
+ *
+ * So diversity comes first and count second. Two areas of work is a real reading; six is a
+ * restatement, and the sixth has a better chance of being something the person would have
+ * rejected.
+ */
+function limitPerCategory(suggestions: readonly Suggestion[]): Suggestion[] {
+  const perCategory = new Map<AiSignalCategory, number>();
+  const out: Suggestion[] = [];
+
+  // Strongest first within each kind, so the two that survive a kind are the two best
+  // supported rather than the two the vocabulary happened to list first.
+  const ranked = [...suggestions].sort((a, b) => b.strength - a.strength);
+
+  for (const suggestion of ranked) {
+    const seen = perCategory.get(suggestion.category) ?? 0;
+
+    if (seen >= MAX_PER_CATEGORY) {
+      continue;
+    }
+
+    perCategory.set(suggestion.category, seen + 1);
+    out.push(suggestion);
+  }
+
+  // Back in vocabulary order within each kind, so two areas of work read the way the
+  // questions would list them rather than by match length.
+  return out.sort((a, b) =>
+    a.category === b.category
+      ? 0
+      : CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category),
+  );
+}
+
+/**
+ * The order kinds appear in, which is the order the intake asks about them.
+ *
+ * Worth pinning: the suggestions are shown in this order, and a person scanning eight of
+ * them should meet them in the sequence the questions will ask for.
+ */
+const CATEGORY_ORDER: readonly AiSignalCategory[] = [
+  'area',
+  'communicationStyle',
+  'context',
+  'language',
+  'sessionFormat',
+  'availability',
+  'guidance',
+];
 
 /**
  * What turns a match off.
@@ -696,7 +778,7 @@ function cueFor(
   key: string,
   name: string,
   cues: Readonly<Record<string, readonly string[]>>,
-): { explicit: boolean } | null {
+): { strength: number; explicit: boolean } | null {
   const words = name
     .toLowerCase()
     .split(/[^a-z]+/)
@@ -705,15 +787,33 @@ function cueFor(
 
   // A phrase match is a person putting it in their own words. A bare word lifted from the
   // name is a weaker signal, and is reported at lower confidence so it can be rejected.
-  if (phrases.some((phrase) => matchAt(text, phrase) !== null)) {
-    return { explicit: true };
-  }
+  // The strongest match wins, measured by how much of the vocabulary term it rests on.
+  //
+  // Without this the cap keeps whichever two came first in vocabulary order, which for a
+  // description mentioning work, relocation, family and language means "career transitions"
+  // and "family dynamics" survive while "work stress" and "adjustment to relocation" are
+  // dropped. A bare cue is weak evidence; "overwhelmed" is strong; a longer phrase is
+  // stronger still, because it is less likely to have been an accident.
+  let best: { strength: number; explicit: boolean } | null = null;
 
-  if (words.some((word) => matchAt(text, word) !== null)) {
-    return { explicit: false };
-  }
+  const consider = (candidates: readonly string[], explicit: boolean): void => {
+    for (const candidate of candidates) {
+      if (matchAt(text, candidate) === null) {
+        continue;
+      }
 
-  return null;
+      const strength = candidate.length;
+
+      if (best === null || strength > best.strength) {
+        best = { strength, explicit };
+      }
+    }
+  };
+
+  consider(phrases, true);
+  consider(words, false);
+
+  return best;
 }
 
 /**
@@ -725,9 +825,24 @@ function cueFor(
  */
 function matchAt(text: string, phrase: string): number | null {
   for (let index = text.indexOf(phrase); index !== -1; index = text.indexOf(phrase, index + 1)) {
-    const before = text.slice(Math.max(0, index - NEGATION_LOOKBACK), index);
+    // Word boundaries on both sides, which is what stops "I moved to **German**y" reading as
+    // a preference for German. That is not a hypothetical: it is what the first version of
+    // this did, and it suggested a language to somebody who had named a country. A substring
+    // match on a short cue is not a smaller risk than a wrong suggestion, it is the wrong
+    // suggestion.
+    const after = text.slice(index + phrase.length, index + phrase.length + 1);
+    if (/[a-z]/.test(after)) {
+      continue;
+    }
 
-    if (!NEGATED_BEFORE.test(before)) {
+    const before = text[index - 1] ?? ' ';
+    if (/[a-z]/.test(before)) {
+      continue;
+    }
+
+    const window = text.slice(Math.max(0, index - NEGATION_LOOKBACK), index);
+
+    if (!NEGATED_BEFORE.test(window)) {
       return index;
     }
   }

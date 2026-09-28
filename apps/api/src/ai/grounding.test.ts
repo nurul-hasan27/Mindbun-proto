@@ -251,6 +251,61 @@ describe('a summary that says nothing', () => {
 });
 
 describe('the direction of the grounding check', () => {
+  /**
+   * The check has to be able to tell a true statement from a fabricated one.
+   *
+   * These are the sentences the *mock* produces, and they are here because they were being
+   * refused: "1 other candidate met everything marked as important" and "in an earlier
+   * search they said" are both true of the case, and both were refused for using a word the
+   * context happened not to contain. A grounding check that cannot tell those from an
+   * invention is not a check — it is a spell-checker, and it trains people to disable it.
+   */
+  it('accepts a true statement about the shape of the case', () => {
+    const result = assertGroundedIn(
+      ok({
+        summary:
+          'They are looking for support around Work stress. Ananya Rao does not carry Exploratory.',
+        observations: [
+          '1 other candidate met everything marked as important.',
+          'In an earlier search they said: Not the right fit.',
+        ],
+      }),
+      CONTEXT,
+    );
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('accepts the real candidate count, written either way', () => {
+    for (const written of ['1', 'one']) {
+      const result = assertGroundedIn(
+        ok({
+          summary:
+            'They are looking for support around Work stress. Ananya Rao does not carry Exploratory.',
+          observations: [`${written} other candidate met everything marked as important.`],
+        }),
+        CONTEXT,
+      );
+
+      expect(result.ok, `"${written}" is the real count and should be accepted`).toBe(true);
+    }
+  });
+
+  it('still refuses a candidate count the case does not justify', () => {
+    const result = assertGroundedIn(
+      ok({
+        summary:
+          'They are looking for support around Work stress. Ananya Rao does not carry Exploratory.',
+        observations: ['7 other candidates met everything marked as important.'],
+      }),
+      CONTEXT,
+    );
+
+    // The control for the test above. "1" is in the case; "7" is not, and a number a matcher
+    // cannot check is exactly what this check exists to keep off the page.
+    expect(result.ok).toBe(false);
+  });
+
   it('allows ordinary connective wording that the context does not contain', () => {
     // A summary that only uses words from the input cannot say "but", "because" or "while",
     // and would be refused for a grammatical reason rather than a factual one. These are the

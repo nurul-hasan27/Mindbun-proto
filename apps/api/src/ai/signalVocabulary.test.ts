@@ -173,6 +173,30 @@ describe('the mock provider, as an interpreter', () => {
     expect(KEYS_OF(signals)).not.toContain('structured');
   });
 
+  it('does not read a country as a language', async () => {
+    // A substring match on a short cue is not a smaller risk than a wrong suggestion, it is
+    // the wrong suggestion. The first version of the mock did exactly this, and the live API
+    // was asked to confirm it: "I moved to Germany" came back with
+    // "You would rather speak German."
+    const signals = await provider.extractSignals([
+      { role: 'user', text: 'I moved to Germany a few years ago.' },
+    ]);
+
+    const languages = signals.filter((signal) => signal.category === 'language');
+    expect(languages).toEqual([]);
+
+    // And the relocation is still read, because it is there in the sentence.
+    expect(KEYS_OF(signals)).toContain('relocation');
+  });
+
+  it('still reads a language when the language is actually named', async () => {
+    const signals = await provider.extractSignals([
+      { role: 'user', text: 'I moved to Germany but I would rather speak German with someone.' },
+    ]);
+
+    expect(KEYS_OF(signals.filter((signal) => signal.category === 'language'))).toEqual(['de']);
+  });
+
   it('reads a language as that language’s code, not as a word it invented', async () => {
     const signals = await provider.extractSignals([
       { role: 'user', text: 'I would rather talk in Hindi, please.' },
@@ -201,6 +225,88 @@ describe('the mock provider, as an interpreter', () => {
     ]);
 
     expect(KEYS_OF(signals)).toContain(OPEN_TO_GUIDANCE_KEY);
+  });
+
+  it('keeps two of each kind, so one kind cannot crowd out the rest', async () => {
+    // A rich description produces eleven suggestions and the cap is eight, so without a
+    // per-category limit the three that fall off the end are whatever came last in vocabulary
+    // order. A person who wrote "I would rather speak Hindi" and saw no language suggested
+    // had been told something untrue about what was understood — and a surplus line saying
+    // "there was more" does not repair it, because the missing thing was not a rounding
+    // detail. It was the only thing said about a language.
+    const signals = await provider.extractSignals([
+      {
+        role: 'user',
+        text: "I've been overwhelmed at work lately. I moved to Germany a few years ago and I think part of what I'm struggling with is balancing what my family expects from me with what I actually want. I'd rather talk things through than be given homework. I am usually free on Tuesday and Wednesday evenings and I would rather speak Hindi.",
+      },
+    ]);
+
+    const perCategory = new Map<string, number>();
+    for (const signal of signals) {
+      perCategory.set(signal.category, (perCategory.get(signal.category) ?? 0) + 1);
+    }
+
+    for (const [category, count] of perCategory) {
+      expect(count, `${category} should be capped at two`).toBeLessThanOrEqual(2);
+    }
+
+    // And the kinds that were mentioned are all represented, which is the actual point.
+    expect(KEYS_OF(signals)).toEqual(
+      expect.arrayContaining(['work-stress', 'exploratory', 'relocation', 'hi']),
+    );
+  });
+
+  it('keeps the two best-supported of a kind, not the two the vocabulary lists first', async () => {
+    // The same description, and the specific case that the per-category cap had to be paired
+    // with. "work" (career transitions) and "family" (family dynamics) come earlier in the
+    // seed than "overwhelmed" (work stress) and "moved to" (relocation), so a cap that kept
+    // the first two would keep the weaker readings of both kinds.
+    const signals = await provider.extractSignals([
+      {
+        role: 'user',
+        text: "I've been overwhelmed at work lately. I moved to Germany a few years ago and I think part of what I'm struggling with is balancing what my family expects from me with what I actually want. I'd rather talk things through than be given homework. I am usually free on Tuesday and Wednesday evenings and I would rather speak Hindi.",
+      },
+    ]);
+
+    const areas = signals.filter((signal) => signal.category === 'area');
+    const contexts = signals.filter((signal) => signal.category === 'context');
+
+    // Three areas match: "overwhelmed" for work stress, and the bare "work" and "family" for
+    // the two that come earlier in the vocabulary. The cap keeps two, and the two it keeps
+    // are decided by how much of what was said each rests on — so the eleven-character cue
+    // beats the four-character one, and work stress survives alongside family dynamics.
+    //
+    // Career transitions is the loser, and it is the *first* of the three in vocabulary
+    // order. A cap that kept the first two would have kept it and dropped work stress,
+    // which is the specific mistake this test exists to catch.
+    expect(areas.map((signal) => signal.key)).toEqual(['work-stress', 'family-dynamics']);
+    expect(areas).toHaveLength(2);
+    expect(signals.map((signal) => signal.key)).not.toContain('career-transitions');
+    expect(contexts).toHaveLength(2);
+  });
+
+  it('lists kinds in the order the questions ask about them', async () => {
+    const signals = await provider.extractSignals([
+      {
+        role: 'user',
+        text: "I've been overwhelmed at work. I moved to Germany and my family expects a lot. I would rather talk things through. Evenings suit me and I would rather speak Hindi.",
+      },
+    ]);
+
+    const order = [
+      'area',
+      'communicationStyle',
+      'context',
+      'language',
+      'sessionFormat',
+      'availability',
+      'guidance',
+    ];
+    const positions = [...new Set(signals.map((signal) => order.indexOf(signal.category)))];
+
+    // Someone scanning eight suggestions should meet them in the sequence the questions will
+    // ask for, rather than by match length.
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
   });
 
   it('returns an empty list rather than a guess when nothing matches', async () => {

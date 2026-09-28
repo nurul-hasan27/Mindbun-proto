@@ -499,6 +499,29 @@ const REPORTING = new Set([
   'discrepancies',
   'mismatch',
   'mismatches',
+  // What a summary says about the *shape* of the case rather than about a person: how many
+  // candidates there were, what happened on a previous pass. Without these, a statement that
+  // is true of the case — "one other candidate met everything marked as important" — is
+  // refused for using a word the context happens not to contain. A check that cannot tell a
+  // true statement from a fabricated one is not a check.
+  'met',
+  'meets',
+  'search',
+  'pass',
+  'earlier',
+  'previously',
+  'before',
+  'time',
+  'other',
+  'others',
+  'another',
+  'eligible',
+  'considered',
+  'shortlist',
+  'everything',
+  'marked',
+  'several',
+  'few',
 ]);
 
 /**
@@ -638,8 +661,42 @@ function caseWords(context: AiCaseContext): ReadonlySet<string> {
   context.alternatives.forEach(addCandidate);
   context.priorFeedback.forEach(add);
 
+  /*
+   * The candidate count, as words the context does not otherwise contain.
+   *
+   * A number is only acceptable if the case justifies it, and this is how a *true* count is
+   * justified: the case holds this many alternatives, so "one other candidate" is a fact
+   * about the case rather than a figure a provider produced. Without it, a summary that
+   * reports the real number is refused while one that invents a different number is also
+   * refused, and the check cannot tell the two apart.
+   */
+  const alternatives = context.alternatives.length;
+  for (const count of [alternatives, 0, 1]) {
+    add(COUNT_WORDS[count] ?? String(count));
+    // The numeral as well as the word. A summary may write "2 other candidates" or "two
+    // other candidates", and both are the same true statement; the digit branch below
+    // looks the token up verbatim, so `2` has to be in the set for `2` to be accepted.
+    add(String(count));
+  }
+
   return set;
 }
+
+/**
+ * How a small number is written in a sentence.
+ *
+ * Only as far as a shortlist would go. Beyond that a summary should say "several", which is
+ * in `REPORTING` and needs no number.
+ */
+const COUNT_WORDS: Readonly<Record<number, string>> = {
+  0: 'no',
+  1: 'one',
+  2: 'two',
+  3: 'three',
+  4: 'four',
+  5: 'five',
+  6: 'six',
+};
 
 /** A capitalised word, whether or not it starts a sentence. */
 function isCapitalised(token: string): boolean {
