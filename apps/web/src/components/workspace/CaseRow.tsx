@@ -41,24 +41,44 @@ export function CaseRow({ entry, to, children }: CaseRowProps) {
         )}
       >
         {/*
-          One heading per row, so a screen reader can list the queue: "Needs review, case
-          1, Hindi Relationships Exploratory". The visible h1 above the list is the page's,
-          and a `p` in a repeated structure would leave the list un-navigable by heading.
+          One heading per row, so a screen reader can list the queue: "case 1, Hindi,
+          relationships, exploratory". The visible h1 above the list is the page's, and a
+          `p` in a repeated structure would leave the list un-navigable by heading.
         */}
         <h3 className="text-subheading font-display">{needsLine(entry.primaryNeeds)}</h3>
 
+        {/*
+          The second line carries only what *differs* between rows.
+
+          It used to end with a constant "Needs review" on every row. The list contains
+          undecided cases and nothing else — that is what the endpoint is for — so the
+          status was the same on all of them, and a column that never varies is a column
+          that teaches a matcher nothing while making every row longer. The page heading
+          already says how many are waiting.
+
+          What is left is the part a matcher actually sorts by: who was suggested, how
+          many times this person has been through a search, and whether they have already
+          given reasons. Two of those three are absent on a first pass, which is correct:
+          a row should not spend space confirming that nothing has happened yet.
+        */}
         <div className="text-small text-ink-muted mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <span>System suggested {entry.systemSuggestedName}</span>
-          <span aria-hidden="true" className="text-line-strong">
-            ·
-          </span>
-          <span>Needs review</span>
+
           {entry.attempt > 1 && (
             <>
               <span aria-hidden="true" className="text-line-strong">
                 ·
               </span>
-              <span>after {entry.attempt} searches</span>
+              <span>{entry.attempt === 2 ? 'Second search' : `Search ${entry.attempt}`}</span>
+            </>
+          )}
+
+          {entry.hasHistory && (
+            <>
+              <span aria-hidden="true" className="text-line-strong">
+                ·
+              </span>
+              <span>has already said what didn&rsquo;t fit</span>
             </>
           )}
         </div>

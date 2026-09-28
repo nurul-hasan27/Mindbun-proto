@@ -321,8 +321,16 @@ describe('the queue', () => {
     expect(screen.getByText('System suggested Tara Joshi')).toBeVisible();
     expect(screen.getByText('System suggested Ruth Adeyemi')).toBeVisible();
 
-    // A second search says so, so a matcher knows the client has been here before.
-    expect(screen.getByText('after 3 searches')).toBeVisible();
+    // The second line carries only what differs between rows. A third search says so, and
+    // a client who has already given reasons says so — those are the two facts a matcher
+    // sorts by, and they are the ones worth spending a row's width on.
+    expect(screen.getByText('Search 3')).toBeVisible();
+    expect(screen.getByText(/has already said what didn’t fit/i)).toBeVisible();
+
+    // "Needs review" used to be on every row. The list holds undecided cases and nothing
+    // else, so the status never varied and a column that never varies teaches nothing. The
+    // heading above already carries it.
+    expect(screen.queryByText('Needs review')).toBeNull();
   });
 
   it('links each case to its own page, and nothing else', async () => {
@@ -366,6 +374,22 @@ describe('the queue', () => {
 
     expect(await screen.findByRole('alert')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Try again' })).toBeVisible();
+  });
+
+  it('spends a first-pass row on nothing it does not need to say', async () => {
+    respondWith = () => ({ body: { cases: [CASE] } });
+    renderRoute(paths.matchingWorkspace);
+
+    await screen.findByText('One case is waiting.');
+
+    const row = screen.getByRole('listitem');
+
+    // Who was suggested, and nothing else. A first pass has no second search and no
+    // reasons given, and a row that says so is a row that spent its width confirming that
+    // nothing has happened yet.
+    expect(within(row).getByText('System suggested Tara Joshi')).toBeVisible();
+    expect(within(row).queryByText(/Search 2|Second search/)).toBeNull();
+    expect(within(row).queryByText(/already said/)).toBeNull();
   });
 
   it('never shows a count of anything but cases', async () => {
