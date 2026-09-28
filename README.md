@@ -25,6 +25,7 @@ not feel right, and receive a rematch based on that feedback.
 **Phase 1 — Foundation + visual design system.** Complete.
 **Phase 2 — Application shell + frontend/backend contract.** Complete.
 **Phase 3 — Domain model + database foundation.** Complete.
+**Phase 4 — Client intake experience.** Complete.
 
 Delivered so far:
 
@@ -33,8 +34,12 @@ Delivered so far:
   shadows, and motion — all in one stylesheet, all contrast-checked.
 - An application shell with a journey-aware header, a position indicator, and route transitions
   that do not destroy page state.
-- Seven journey routes: `/` and `/start` implemented; `/intake`, `/matching`, `/recommendation`,
-  `/feedback` and `/rematch` present as intentional placeholders for the flow to come.
+- Seven journey routes: `/`, `/start` and the whole of `/intake` implemented; `/matching`,
+  `/recommendation`, `/feedback` and `/rematch` present as intentional placeholders for the flow
+  to come.
+- **A complete intake** — seven questions, one at a time, in plain language rather than
+  vocabulary names, with a review screen, an optional closing note, and honest handling of
+  everything that can go wrong. Reasoning in [`docs/intake-flow.md`](docs/intake-flow.md).
 - A typed API client with timeouts, cancellation, typed errors, and loading and error states in the
   product's own voice.
 - A versioned backend API under `/api/v1`, with Fastify response schemas, CORS, and an
@@ -46,11 +51,12 @@ Delivered so far:
   coherent language/region/availability combinations rather than random noise.
 - `GET /api/v1/therapists` and `GET /api/v1/therapists/:id`, and one editorial profile page at
   `/therapists/:id` that presents a person rather than a catalogue entry.
+- `GET /api/v1/intake/vocabulary` and `POST /api/v1/intakes`, so the questions are asked in terms
+  of what the database actually holds, and a submission is validated, stored, and safe to retry.
 - Tests, strict TypeScript, ESLint (type-aware + jsx-a11y), Prettier, and written documentation.
 
-Deliberately **not** built: the intake form, preference capture, matching, recommendation
-explanation, feedback and rematch behaviour, persistence of anything a person has written,
-authentication, and any AI service.
+Deliberately **not** built: matching, scoring, ranking, recommendation, an explanation of why
+anyone was recommended, feedback and rematch behaviour, geographic matching, and any AI service.
 
 ## Tech stack
 
@@ -140,6 +146,12 @@ area-of-work key), and answers `{ items, pagination: { total, take, skip, hasMor
 id is a `400` and an unknown id is a `404` — they mean different things to a caller. Every response
 is declared as a JSON Schema that Fastify validates and serialises from.
 
+`POST /api/v1/intakes` takes the structured answers plus two anonymous UUIDs and answers
+`{ intakeId, receivedAt }`. It is **safe to retry**: the submission id is unique, so pressing
+"Try again" after a failed save stores one intake rather than two. Unknown vocabulary keys, a
+missing language, a window that ends before it starts, and a note that is too long are all `400`
+with a sentence explaining which, and never with the value back.
+
 ## Database
 
 PostgreSQL 17 in Docker Compose, with a development database and a separate test database created
@@ -215,6 +227,7 @@ therapist routes report `503`. Liveness should not go down because a database is
 │   ├── architecture.md         the whole system, and why
 │   ├── frontend-architecture.md routing, state boundaries, API client
 │   ├── domain-model.md         entities, relationships, constraints
+│   ├── intake-flow.md          the questions, the mapping, the state, the payload
 │   ├── design-system.md        the visual language
 │   └── screenshots/
 └── package.json              npm workspaces root
@@ -222,11 +235,13 @@ therapist routes report `503`. Liveness should not go down because a database is
 
 ## Documentation
 
+- [`docs/intake-flow.md`](docs/intake-flow.md) — every question, the human wording mapped to
+  database keys, the state model, persistence, the API payload, and the privacy decisions.
 - [`docs/domain-model.md`](docs/domain-model.md) — the data model, and the reasoning behind it.
 - [`docs/frontend-architecture.md`](docs/frontend-architecture.md) — routing, layouts, the API
   client, and where state is allowed to live.
 - [`docs/architecture.md`](docs/architecture.md) — repository shape, the request path, testing
-  strategy, and the seams Phase 4 will plug into.
+  strategy, and the seams Phase 5 will plug into.
 - [`docs/design-system.md`](docs/design-system.md) — philosophy, tokens, components, motion,
   accessibility rules.
 
@@ -236,9 +251,14 @@ therapist routes report `503`. Liveness should not go down because a database is
   photographed, and the product stores no photographs at all — a profile shows a generated monogram.
 - **Clients carry no identity.** A `Client` is a UUID and two timestamps. No name, email, phone,
   address, or demographics, because none of them help a match and all of them could hurt someone.
-- **`Intake.rawText` is the most sensitive field in the system.** It is never logged, never sent to
-  a third party, and is not a matching input in this phase. Prisma is configured to log warnings and
-  errors only — never query arguments — so client text cannot reach a log by accident.
+- **`Intake.rawText` is the most sensitive field in the system.** Someone's own words about their
+  life. It is never logged, never sent to a third party, and is not analysed at all. Prisma logs
+  `warn` and `error` _events_, never query arguments, so client text cannot reach a log by
+  accident; and a test asserts that a failed request's response body contains neither the note
+  nor a connection string.
+- **The draft lives in `sessionStorage`, not `localStorage`.** A refresh preserves it; closing the
+  tab destroys it. A draft cannot outlive the tab on a shared machine, and it is removed the
+  moment the intake is sent or someone chooses to start over.
 - **Nothing sensitive is inferred.** Contextual experience (diaspora, relocation, family
   expectations) is data a therapist states about themselves, never derived from a name, a place, or
   anything a person wrote.
@@ -255,8 +275,13 @@ Verified in a real browser, not assumed:
 - Body and secondary text pass WCAG AA; the accent action colour passes on `--color-surface` at 5.3:1.
 - All decorative SVG is `aria-hidden`; the one meaningful diagram carries a screen-reader caption.
 - `prefers-reduced-motion: reduce` removes every animation, verified with `getAnimations()`.
-- Layouts are designed at 320/390/834/1440px, not simply scaled down. The profile page has no
-  horizontal overflow at any of them.
+- Layouts are designed at 320/390/834/1440px, not simply scaled down. The profile page and all
+  eight intake screens have no horizontal overflow at any of them.
+- Every choice in the intake is a real `<input type="checkbox">` or `type="radio">`, so arrow keys
+  and Space work without being reimplemented. A chosen row is marked four ways — rule, tint, mark
+  and type weight — so the state never depends on colour alone.
+- Refusing to continue shows an alert _and_ moves focus to the answers, so a keyboard user is
+  already where the fix has to happen.
 - Error states never lead with a technical message; the detail is in a collapsed disclosure and in
   the console.
 

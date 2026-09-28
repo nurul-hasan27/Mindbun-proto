@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from '../../generated/prisma/client.js';
-import { DataStoreUnavailableError, type TherapistRepository } from './therapistRepository.js';
+import type { TherapistRepository } from './therapistRepository.js';
+import { DataStoreUnavailableError } from '../storeErrors.js';
 import type {
   AttributeView,
   AvailabilityWindowView,

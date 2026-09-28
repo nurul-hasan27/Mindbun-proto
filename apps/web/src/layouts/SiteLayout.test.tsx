@@ -2,11 +2,14 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { paths } from '../routes/paths';
 import { renderRoute } from '../test/renderRoute';
+import { stubIntakeApi } from '../test/intakeRender';
 
 const ALL_ROUTES = [
   paths.home,
   paths.start,
   paths.intake,
+  `${paths.intake}/language`,
+  `${paths.intake}/review`,
   paths.matching,
   paths.recommendation,
   paths.feedback,
@@ -76,6 +79,7 @@ describe('application shell', () => {
 
   afterEach(() => {
     stubs.restore();
+    vi.unstubAllGlobals();
   });
 
   it('keeps the same main element across a navigation, so page state is never thrown away', async () => {
@@ -133,6 +137,15 @@ describe('application shell', () => {
 });
 
 describe('navigation', () => {
+  beforeEach(() => {
+    // The intake cannot render its questions without the service's vocabulary.
+    stubIntakeApi();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('moves from the landing page into the journey without a reload', async () => {
     renderRoute(paths.home);
 
@@ -216,6 +229,14 @@ describe('navigation', () => {
 });
 
 describe('route accessibility', () => {
+  beforeEach(() => {
+    stubIntakeApi();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('gives every route exactly one h1, a title, and a header', async () => {
     for (const path of ALL_ROUTES) {
       const { unmount } = renderRoute(path);

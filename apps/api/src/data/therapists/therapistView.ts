@@ -1,3 +1,7 @@
+import type { DayName } from '../dayOfWeek.js';
+
+export type { DayName };
+
 /**
  * The therapist shapes the API speaks.
  *
@@ -11,9 +15,6 @@ export interface AttributeView {
   readonly key: string;
   readonly name: string;
 }
-
-export type DayName =
-  'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
 
 export interface AvailabilityWindowView {
   readonly dayOfWeek: DayName;

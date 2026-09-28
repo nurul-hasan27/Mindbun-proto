@@ -1,15 +1,20 @@
 # Architecture
 
-Phases 1–3 deliver a runnable foundation, a complete visual language, the communication
-architecture between the two applications, and a database that can make a future recommendation
-explain itself. Product behaviour is still deliberately absent.
+Phases 1–4 deliver a runnable foundation, a complete visual language, the communication
+architecture between the two applications, a database that can make a future recommendation
+explain itself, and the intake that fills it.
 
 - **Phase 1** — foundation + visual design system.
 - **Phase 2** — application shell + the frontend/backend contract.
 - **Phase 3** — domain model + database foundation.
+- **Phase 4** — client intake experience.
 
-The client is documented in depth in [`frontend-architecture.md`](./frontend-architecture.md) and
-the data model in [`domain-model.md`](./domain-model.md). This file covers the whole system.
+Matching, ranking and recommendation are still deliberately absent: an intake can be completed
+and stored, and nothing yet reads one to choose a therapist.
+
+The client is documented in depth in [`frontend-architecture.md`](./frontend-architecture.md), the
+data model in [`domain-model.md`](./domain-model.md), and the intake in
+[`intake-flow.md`](./intake-flow.md). This file covers the whole system.
 
 ---
 
@@ -150,10 +155,17 @@ src/
 
 - `buildApp()` returns an unstarted instance, which is what makes `app.inject()` testing possible
   without binding a port. `server.ts` is the only file that listens.
-- **The repository is injected.** Routes depend on the `TherapistRepository` interface, never on
-  Prisma, so the whole API is testable without a database and the composition root (`app.ts`) is the
-  only place that knows which implementation is in use. `buildApp()` with no repository wires one
-  that reports `503`, so the process still starts and liveness still answers without a database.
+- **The repositories are injected.** Routes depend on the `TherapistRepository` and
+  `IntakeRepository` interfaces, never on Prisma, so the whole API is testable without a database
+  and the composition root (`app.ts`) is the only place that knows which implementation is in use.
+  `buildApp()` with no repository wires ones that report `503`, so the process still starts and
+  liveness still answers without a database.
+- **One error shape for the whole application API**, including the two failures that would
+  otherwise answer in Fastify's own words: a body that is not JSON, and a body that does not match
+  a schema. The request is still logged, so nothing is lost for whoever is debugging.
+- **Request validation is hand-written where the answer matters.** `data/intake/intakeValidation.ts`
+  reports sentences rather than JSON Schema paths, because a 400 is read by whoever is building
+  the client.
 - Every response is declared as a JSON Schema that Fastify validates and serialises from, next to a
   TypeScript interface for callers inside the service. Errors share one shape: `{ statusCode, error,
 message }`.
@@ -209,6 +221,12 @@ npm run db:studio    # browse the data
 - **Profiles are validated where they are written** (`data/therapists/profileDraft.ts`) rather than
   by database CHECK constraints, which Prisma does not model — see
   [`domain-model.md`](./domain-model.md#availabilitywindow).
+- **Two migrations.** `init` creates the domain. `add_intake_session` adds the two identifiers an
+  anonymous intake needs — `clients.sessionId` and the `UNIQUE intakes.submissionId` that makes a
+  retry safe — plus `client_preferences.openToGuidance`, which records "I'm not sure yet" as a real
+  answer rather than an empty list. The new columns are added nullable, backfilled with
+  `gen_random_uuid()`, and only then made `NOT NULL`: the migration Prisma would have generated
+  fails outright on a database that already holds a client or an intake.
 
 ## 6. The request path, end to end
 
@@ -276,20 +294,23 @@ No CSS-in-JS, no component library, no state library, no HTTP library (the platf
 `AbortController` is enough), no validation framework, no migration tool beyond Prisma, no
 `clsx` (there is a three-line `cx`), no `dotenv` in the service (Node loads it), no icon package.
 
-## 10. Where Phase 4 attaches
+## 10. Where Phase 5 attaches
 
-The seams are already in place:
+The intake stored everything a first matching pass would need, and nothing was built ahead of it:
 
-| Phase 4 concern     | Where it lands                                                                            |
-| ------------------- | ----------------------------------------------------------------------------------------- |
-| Intake questions    | `src/api/v1/schemas/intake.ts` + `routes/intake.ts`; a page under `src/pages`             |
-| Preference capture  | `ClientPreference` and `ClientAvailability` already exist; validation at the API boundary |
-| In-progress answers | Local state in the page that asks them — the shell no longer remounts pages               |
-| Matching            | Reads `TherapistProfile`; the first use of the vocabulary joins                           |
-| Recommendations     | A new `Recommendation` entity; `Feedback` gains a `recommendationId`                      |
-| Real content        | `lib/api/*` typed endpoints, with synthetic fixtures clearly labelled                     |
+| Phase 5 concern    | Where it lands                                                                      |
+| ------------------ | ----------------------------------------------------------------------------------- |
+| Matching           | Reads `ClientPreference`; the first use of the vocabulary joins                     |
+| Timezone overlap   | `ClientAvailability` vs `AvailabilityWindow`, both in IANA zones                    |
+| Explaining a match | `Intake.rawText`, stored unanalysed since Phase 4, plus the keys it was stored with |
+| `openToGuidance`   | Read it to show breadth rather than pretending to know                              |
+| Recommendations    | A new `Recommendation` entity; `Feedback` gains a `recommendationId`                |
 
 Guardrails for those phases, so the visual language survives: no new colour outside the clay and
 sage ramps, no component that wears a card unless it is genuinely a surface, no endpoint without a
 schema and a test, no `any`, no free-text attribute that something has to match on later, and no
 client copy that talks about the person as a user being funnelled.
+
+The one thing Phase 5 must not skip: a match that cannot be explained from these fields is a match
+this product has no business making. Every key stored by the intake exists because some future
+sentence in a "Why this match?" was going to need it.

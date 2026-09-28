@@ -1,8 +1,6 @@
 import type { FastifyPluginCallback, FastifyReply } from 'fastify';
-import {
-  DataStoreUnavailableError,
-  type TherapistRepository,
-} from '../../../data/therapists/therapistRepository.js';
+import type { TherapistRepository } from '../../../data/therapists/therapistRepository.js';
+import { DataStoreUnavailableError } from '../../../data/storeErrors.js';
 import {
   errorResponseSchema,
   therapistListResponseSchema,

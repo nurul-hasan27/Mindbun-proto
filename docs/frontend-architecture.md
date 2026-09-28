@@ -56,7 +56,7 @@ meets a request.
 | ----------------- | ----------- | ------------------------------------------ |
 | `/`               | implemented | The doorway                                |
 | `/start`          | implemented | Step 1: what you are looking for           |
-| `/intake`         | placeholder | Step 2: the questions                      |
+| `/intake/*`       | implemented | Step 2: seven questions, and the review    |
 | `/matching`       | placeholder | Step 3: where a recommendation comes from  |
 | `/recommendation` | placeholder | Step 4: one person, and the reasons        |
 | `/feedback`       | placeholder | Step 5: how it felt                        |
@@ -71,9 +71,8 @@ header drops its "Start" link on that route rather than pretending it is the beg
 
 ### The journey
 
-`routes/journey.ts` is the groundwork for the real flow. It is one ordered list that knows the
-step order, the plain-language name of each step, and whether that step exists yet. It is used for
-three things and nothing else:
+`routes/journey.ts` is one ordered list that knows the step order, the plain-language name of each
+step, and whether that step exists yet. It is used for three things and nothing else:
 
 - the position indicator in the header
 - the "Back" link on each step
@@ -163,20 +162,26 @@ reject a payload missing any of them.
 database and no generated client, and why the schema can be reshaped without moving the HTTP
 contract underneath anyone.
 
-A shared `packages/contracts` was considered and deliberately deferred. With one domain, the build
-ordering a shared TypeScript package would require is more machinery than the drift risk it removes.
-The trigger for introducing it is the second domain: when `intake` lands, both sides need more than
-a handful of shapes, and that is the moment to extract one package with a real build step.
+The trigger for a shared `packages/contracts` has now arrived: intake made this the second domain,
+and the mirrored vocabulary, window and payload shapes are more than a handful of hand-copied
+types should be asked to carry. It is still not extracted — doing it properly means a build step
+and a versioning policy, which is Phase 5's decision rather than something to bolt on here. What is
+in place instead is that the mirrored types are asserted against the wire format by tests on both
+sides, so drift fails a test rather than a person.
+
+What still stops at the API boundary is Prisma's generated code, exactly as it does for therapists:
+`data/intake/intakeTypes.ts` is the vocabulary both sides agree on, and no generated row type
+appears in the client, in a schema, or in a payload.
 
 ## 6. State boundaries
 
-| Kind                | Where it lives                                                      | Why                                                                                   |
-| ------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Server data         | Nowhere persistent. `useApiResource` in the component that needs it | A remount re-fetches. There is no cache yet, and pretending otherwise would be a lie. |
-| One async resource  | `useApiResource(load, deps)`                                        | Derived `loading`, abortable, no global store                                         |
-| In-progress answers | The page that asks them (Phase 4)                                   | Survives navigation now that `<main>` is no longer remounted                          |
-| URL                 | The only state that survives a refresh                              | Deep links, back/forward, and shareable links all work for free                       |
-| Configuration       | `lib/api/config.ts`, read once at module load                       | Build-time constants, not runtime state                                               |
+| Kind                | Where it lives                                                      | Why                                                                                    |
+| ------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Server data         | Nowhere persistent. `useApiResource` in the component that needs it | A remount re-fetches. There is no cache yet, and pretending otherwise would be a lie.  |
+| One async resource  | `useApiResource(load, deps)`                                        | Derived `loading`, abortable, no global store                                          |
+| In-progress answers | `IntakeProvider`, above the question routes                         | Survives navigation, because navigating swaps the question and not the state behind it |
+| URL                 | The only state that survives a refresh                              | Deep links, back/forward, and shareable links all work for free                        |
+| Configuration       | `lib/api/config.ts`, read once at module load                       | Build-time constants, not runtime state                                                |
 
 There is no context, no store, and no cache. When several pages need the same data, the first
 honest step is to put it in a hook or the URL — not to reach for a global store.
@@ -217,15 +222,40 @@ Availability is shown in the therapist's own timezone, named in words ("Local ti
 Time"), because those times are a fact about their wall clock rather than an instant, and converting
 them would imply a precision the matching calculation does not have yet.
 
-## 9. Adding a real feature later
+## 9. The intake, in this architecture
 
-The intake flow is the first thing that will exercise this structure. In rough order:
+The intake is the first thing that has to hold someone's attention, so the state design is the
+part worth understanding. The full reasoning is in [`intake-flow.md`](./intake-flow.md); three
+things here are architectural rather than editorial.
 
-1. Add `src/api/v1/schemas/intake.ts` and `src/api/v1/routes/intake.ts` on the server, writing to
-   `Intake` and `ClientPreference`.
-2. Add a `src/lib/api/intake.ts` with `submitIntake()` and mirror the types.
-3. Add a page under `src/pages/`, give it its own local state, and render `<LoadingNote>` /
-   `<ErrorNote />` around the request.
+**The provider sits above the routes, not inside a step.** `IntakeEntry` wraps the whole
+`/intake` subtree, so navigating between questions swaps the rendered question and never the state
+behind it. No pathname is used as a React key, exactly as in the shell — which is what makes
+"Back" free, and what would have been broken by a key.
+
+**Each question still has its own URL.** The URL says _where_; the draft says _what they answered_.
+That split is why a refresh, a bookmark and a shared link all work without a single special case.
+
+**The draft is a value in `sessionStorage`, and the reason is privacy.** Refreshing mid-flow has to
+preserve it; closing the tab has to destroy it. Session storage is the only browser store that does
+both, and `localStorage` — which would outlive the tab on a shared machine — was rejected on those
+grounds rather than on convenience.
+
+### Where the vocabulary comes from
+
+`GET /api/v1/intake/vocabulary` is read once when the flow starts, and the questions offer only
+terms the database actually holds. This is not a nicety: a phrase whose key the server has never
+heard of would be a 400 at submission, discovered after someone had answered five questions. The
+one list that _is_ the data rather than our copy of it is the language list.
+
+## 10. Adding the next feature
+
+The recommendation step is the next thing to exercise this structure. In rough order:
+
+1. Add `src/api/v1/schemas/recommendation.ts` and `routes/recommendation.ts` on the server.
+2. Add a `src/lib/api/recommendation.ts` with `getRecommendations()` and mirror the types.
+3. Add a page under `src/pages/`, render `<LoadingNote />` / `<ErrorNote />` around the request.
 4. Add the step to `journey` when it becomes real — nothing else in the shell needs to change.
 
-No new dependency, and no change to the design system, should be required.
+Decide at that point whether the mirrored shapes have outgrown hand-copying and want
+`packages/contracts`. No new dependency, and no change to the design system, should be required.

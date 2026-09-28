@@ -1,9 +1,7 @@
 import { describe, expect, it, vi, type MockedFunction } from 'vitest';
 import { buildApp } from '../../../app.js';
-import {
-  DataStoreUnavailableError,
-  type TherapistRepository,
-} from '../../../data/therapists/therapistRepository.js';
+import type { TherapistRepository } from '../../../data/therapists/therapistRepository.js';
+import { DataStoreUnavailableError } from '../../../data/storeErrors.js';
 import type {
   TherapistProfileView,
   TherapistSummary,

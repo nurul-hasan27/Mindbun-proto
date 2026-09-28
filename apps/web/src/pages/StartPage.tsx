@@ -1,28 +1,24 @@
 import { ArrowGlyph } from '../components/ArrowGlyph';
-import { Button } from '../components/Button';
+import { ButtonLink } from '../components/Button';
 import { Container } from '../components/Container';
 import { Eyebrow } from '../components/Eyebrow';
 import { TextLink } from '../components/TextLink';
 import { usePageMeta } from '../lib/usePageMeta';
-import { paths } from '../routes/paths';
+import { intakePath, paths } from '../routes/paths';
 
-const INTAKE_NOTE_ID = 'intake-note';
-
-/** A still cursor. The prototype is a promise of where typing will happen. */
-function Caret() {
-  return (
-    <span
-      aria-hidden="true"
-      className="bg-clay-400 ml-1 inline-block h-[0.95em] w-px translate-y-[0.12em] align-baseline"
-    />
-  );
-}
-
+/**
+ * The doorway to the questions.
+ *
+ * In Phase 1 this promised that typing would arrive later; it does now, so the
+ * page keeps only the promise and hands over. The pull-quote stays because it is
+ * the one thing on the screen that tells someone what kind of answer this product
+ * is after — and it is their words, not ours, which is the point.
+ */
 export function StartPage() {
   usePageMeta({
     title: 'Start with what you are looking for',
     description:
-      'Share what matters to you in your own words. The guided questions arrive in a later phase of this prototype.',
+      'Share what matters to you in your own words. A short series of open questions, asked one at a time.',
   });
 
   return (
@@ -49,24 +45,20 @@ export function StartPage() {
             <blockquote className="font-display text-subheading text-ink mt-5 text-pretty italic">
               “I’d like someone who is honest with me, who doesn’t make me feel like I’m being
               assessed, and who lets me be quiet for a while.”
-              <Caret />
             </blockquote>
           </figure>
 
           <div className="mt-10 flex flex-col items-start gap-5">
-            <Button
-              variant="quiet"
-              unavailable
-              unavailableHint={INTAKE_NOTE_ID}
-              trailing={<ArrowGlyph />}
-            >
+            <ButtonLink to={intakePath('support')} trailing={<ArrowGlyph />}>
               Continue
-            </Button>
-            <p id={INTAKE_NOTE_ID} className="text-small text-ink-muted max-w-md text-pretty">
-              Nothing is asked yet. The guided questions arrive in the next phase of this prototype.
-            </p>
+            </ButtonLink>
             <TextLink to={paths.home}>Back</TextLink>
           </div>
+
+          <p className="text-small text-ink-faint mt-10 max-w-md text-pretty">
+            Seven short questions, one at a time. Most take a few seconds, and three of them you can
+            leave blank.
+          </p>
         </div>
       </Container>
     </section>

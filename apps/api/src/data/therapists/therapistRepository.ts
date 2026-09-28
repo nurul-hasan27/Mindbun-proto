@@ -18,11 +18,3 @@ export interface TherapistRepository {
   hasLanguage(code: string): Promise<boolean>;
   hasArea(key: string): Promise<boolean>;
 }
-
-/** Thrown when the database cannot be reached or refuses a query. */
-export class DataStoreUnavailableError extends Error {
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
-    this.name = 'DataStoreUnavailableError';
-  }
-}

@@ -68,6 +68,57 @@ export interface TherapistPage {
   };
 }
 
+// --------------------------------------------------------------------------
+// Intake
+//
+// Mirrors `apps/api/src/api/v1/schemas/intake.ts` and
+// `apps/api/src/data/intake/intakeTypes.ts`. The vocabulary is fetched rather
+// than hardcoded, so these are the shapes and the client reads the terms from
+// the service.
+// --------------------------------------------------------------------------
+
+export interface LanguageView {
+  /** ISO 639-1, e.g. "en". */
+  readonly code: string;
+  readonly name: string;
+}
+
+export interface IntakeVocabulary {
+  readonly areasOfWork: readonly AttributeView[];
+  readonly communicationStyles: readonly AttributeView[];
+  readonly contextualExperience: readonly AttributeView[];
+  readonly languages: readonly LanguageView[];
+  readonly sessionFormats: readonly AttributeView[];
+}
+
+export interface AvailabilityInput {
+  /** IANA zone name, e.g. "Asia/Kolkata". The client sends this; people see words. */
+  readonly timezone: string;
+  readonly windows: readonly AvailabilityWindowView[];
+}
+
+/** `POST /api/v1/intakes` — the request, as this client sends it. */
+export interface IntakeDraftPayload {
+  /** Anonymous id for this visit, so one visit reuses one client row. */
+  readonly sessionId: string;
+  /** Anonymous id for this submission, so a retry cannot store it twice. */
+  readonly submissionId: string;
+  readonly areasOfWork: readonly string[];
+  readonly communicationStyles: readonly string[];
+  readonly contextualExperiences: readonly string[];
+  readonly languages: readonly string[];
+  readonly sessionFormats: readonly string[];
+  readonly availability: AvailabilityInput | null;
+  /** The person said they are not yet sure what kind of conversation they want. */
+  readonly openToGuidance: boolean;
+  readonly rawText: string;
+}
+
+export interface IntakeReceipt {
+  readonly intakeId: string;
+  readonly receivedAt: string;
+}
+
 /** Shape of an unsuccessful API response, when the server sends one. */
 export interface ApiErrorPayload {
   readonly statusCode?: number;

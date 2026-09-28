@@ -4,8 +4,8 @@ import { paths } from '../routes/paths';
 import { expectSoundHeadingStructure } from '../test/headingStructure';
 import { renderRoute } from '../test/renderRoute';
 
+// The intake is built as of Phase 4, so it is no longer one of these.
 const PLACEHOLDERS = [
-  { path: paths.intake, title: /let’s begin with what matters to you/i },
   { path: paths.matching, title: /where a recommendation comes from/i },
   { path: paths.recommendation, title: /one person, and the reasons why/i },
   { path: paths.feedback, title: /if it doesn’t feel right, say so/i },
@@ -38,9 +38,9 @@ describe('journey placeholders', () => {
     expectSoundHeadingStructure();
   });
 
-  it('steps back from the first placeholder to the start page', () => {
-    renderRoute(paths.intake);
+  it('steps back to the step before it, which is the intake', () => {
+    renderRoute(paths.matching);
 
-    expect(screen.getByRole('link', { name: 'Back' })).toHaveAttribute('href', paths.start);
+    expect(screen.getByRole('link', { name: 'Back' })).toHaveAttribute('href', paths.intake);
   });
 });

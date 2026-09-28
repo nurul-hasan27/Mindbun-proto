@@ -131,26 +131,30 @@ Rules:
 
 Only what the product actually needs. Each is small, single-purpose, and token-driven.
 
-| Component                   | Notes                                                                             |
-| --------------------------- | --------------------------------------------------------------------------------- |
-| `Container`                 | The one page container; `as` lets a section be semantic                           |
-| `Eyebrow`                   | Small letterspaced label; `as="h2"` when it introduces a section                  |
-| `Button`                    | A real `<button>`; `unavailable` marks a control that exists but is not yet ready |
-| `ButtonLink`                | The same visual language, rendered as a real `<a>` via React Router               |
-| `TextLink`                  | Navigation that behaves like text, with an underline that draws in from the left  |
-| `ArrowGlyph`                | A typographic arrow that leans 2px on hover — the only flourish an action gets    |
-| `Wordmark`                  | Name plus a four-point mark; the same shape as the favicon                        |
-| `UnderlineMark`             | One hand-drawn clay stroke, used once, under the promise the product makes        |
-| `OverlapMark`               | The product idea as a diagram: two circles, the shared area in between            |
-| `QuietButton`               | A real `<button>` in the same voice, for actions like "Try again"                 |
-| `JourneyIndicator`          | Six hairlines showing where you are. Decorative, never a link                     |
-| `JourneyPlaceholder`        | The shared shape of a step that does not exist yet, so five cannot drift apart    |
-| `Monogram`                  | A person's initials in a hairline ring. The product stores no photographs         |
-| `ProfileSection`            | One labelled, hairline-divided block of a profile, with a real heading            |
-| `LoadingNote`               | One quiet line and a hairline that breathes. The loading state for the product.   |
-| `ErrorNote`                 | A plain-language title, one way forward, and the technical detail tucked away     |
-| `DevStatus`                 | Development-only proof that the client can reach the API. Never in a build.       |
-| `SiteHeader` / `SiteFooter` | A name, your position, and a footnote. Not chrome — a frame.                      |
+| Component                   | Notes                                                                               |
+| --------------------------- | ----------------------------------------------------------------------------------- |
+| `Container`                 | The one page container; `as` lets a section be semantic                             |
+| `Eyebrow`                   | Small letterspaced label; `as="h2"` when it introduces a section                    |
+| `Button`                    | A real `<button>`; `unavailable` marks a control that exists but is not yet ready   |
+| `ButtonLink`                | The same visual language, rendered as a real `<a>` via React Router                 |
+| `TextLink`                  | Navigation that behaves like text, with an underline that draws in from the left    |
+| `ArrowGlyph`                | A typographic arrow that leans 2px on hover — the only flourish an action gets      |
+| `Wordmark`                  | Name plus a four-point mark; the same shape as the favicon                          |
+| `UnderlineMark`             | One hand-drawn clay stroke, used once, under the promise the product makes          |
+| `OverlapMark`               | The product idea as a diagram: two circles, the shared area in between              |
+| `QuietButton`               | A real `<button>` in the same voice, for actions like "Try again"                   |
+| `JourneyIndicator`          | Six hairlines showing where you are. Decorative, never a link                       |
+| `JourneyPlaceholder`        | The shared shape of a step that does not exist yet, so five cannot drift apart      |
+| `Monogram`                  | A person's initials in a hairline ring. The product stores no photographs           |
+| `ChoiceOption`              | One answer: a native checkbox or radio wearing the row it sits in                   |
+| `ToggleAll`                 | A plain button that shows or hides a list, saying how much is behind it             |
+| `IntakeProgress`            | A part of the flow named in small capitals, and the hairlines showing where you are |
+| `ProfileSection`            | One labelled, hairline-divided block of a profile, with a real heading              |
+| `ProfileSection`            | One labelled, hairline-divided block of a profile, with a real heading              |
+| `LoadingNote`               | One quiet line and a hairline that breathes. The loading state for the product.     |
+| `ErrorNote`                 | A plain-language title, one way forward, and the technical detail tucked away       |
+| `DevStatus`                 | Development-only proof that the client can reach the API. Never in a build.         |
+| `SiteHeader` / `SiteFooter` | A name, your position, and a footnote. Not chrome — a frame.                        |
 
 Three decisions worth stating:
 
@@ -176,6 +180,26 @@ novelty or a running gag:
 Error states never lead with a technical message. Each failure kind maps to a plain sentence and
 one useful action; the status code and internal detail live in a collapsed disclosure, and in the
 console. The product does not show `ERR_CONNECTION_REFUSED`, stack traces, or raw JSON to a visitor.
+
+### A question is the page
+
+The intake is the one place where a form could have taken over, and the whole design is a
+refusal of that. The rules:
+
+- **One question per screen**, as the `h1`, at display size. Everything else is sized to stay out
+  of its way.
+- **The label above it names the _part of the flow_** — "Getting to know what matters" — not the
+  question. Repeating the question in small capitals directly above itself is noise wearing the
+  same words twice.
+- **Choices are rows of text**, not cards in a grid. A hairline between them, a small square or
+  circle, and nothing else.
+- **A selected row is marked four ways** — a clay rule, a clay tint, a filled mark, and heavier
+  type — so the state survives being printed in black and white, and so a test can assert it
+  without inspecting a colour.
+- **No step counter in the body.** The hairlines show the shape of what is left; the count is in
+  the text alternative, where it is useful and nowhere else.
+- **The action is "Continue"** everywhere, and on the last question it becomes "Review what you
+  told us". Nothing on this screen promises a match, because there is not one to promise.
 
 ### People are not entries
 

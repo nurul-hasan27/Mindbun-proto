@@ -39,7 +39,16 @@ datasource db {
 /// lives in Intake and ClientPreference instead, where it can be reasoned about
 /// and, eventually, deleted.
 model Client {
-  id        String   @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
+
+  /// An anonymous identifier minted by the browser for one visit.
+  ///
+  /// It exists so an intake does not create a new client row every time someone
+  /// presses "Continue" twice, and it is the only handle a prototype session
+  /// has. It identifies nobody: the row still holds no personal data. A real
+  /// service would replace this with a proper session or account.
+  sessionId String @unique @db.Uuid
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -245,6 +254,13 @@ model ClientPreference {
   id        String         @id @default(uuid()) @db.Uuid
   clientId  String         @db.Uuid
   kind      PreferenceKind @default(PREFERENCE)
+  /// The person said they are not yet sure what kind of conversation they want.
+  ///
+  /// This is a real answer rather than an empty one, and it changes what a
+  /// recommendation should do: show breadth instead of pretending to know. It
+  /// deserves a column of its own instead of being inferred from an empty
+  /// `communicationStyles` list, which would equally mean "skipped the question".
+  openToGuidance Boolean    @default(false)
   /// Optional plain-language context, e.g. "I find it hard to start".
   note      String?
   createdAt DateTime       @default(now())
@@ -293,8 +309,16 @@ model Intake {
   id        String   @id @default(uuid()) @db.Uuid
   clientId  String   @db.Uuid
   rawText   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  /// The browser's identifier for one submission attempt.
+  ///
+  /// Unique, so a retry after a failed response — the person pressing "Try
+  /// again", or a double click — returns the intake that was already stored
+  /// instead of writing a second copy of the same answers. This is the whole
+  /// reason the column exists.
+  submissionId String   @unique @db.Uuid
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 

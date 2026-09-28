@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../../app.js';
 import { createPrismaTherapistRepository } from './prismaTherapistRepository.js';
@@ -163,10 +164,16 @@ describe('therapists', () => {
 
   it('stores intake text without logging it', async () => {
     await clearTherapists();
-    const client = await prisma.client.create({ data: {} });
+    const client = await prisma.client.create({
+      data: { sessionId: randomUUID() },
+    });
 
     const intake = await prisma.intake.create({
-      data: { clientId: client.id, rawText: 'I have been feeling lost since we moved.' },
+      data: {
+        clientId: client.id,
+        submissionId: randomUUID(),
+        rawText: 'I have been feeling lost since we moved.',
+      },
     });
 
     expect(intake.rawText).toContain('moved');

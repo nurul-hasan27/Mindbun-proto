@@ -1,12 +1,12 @@
 import cors from '@fastify/cors';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import { v1Routes } from './api/v1/routes/index.js';
 import type { LogLevel } from './config/env.js';
+import type { IntakeRepository } from './data/intake/intakeRepository.js';
+import { createPrismaIntakeRepository } from './data/intake/prismaIntakeRepository.js';
 import { createPrismaTherapistRepository } from './data/therapists/prismaTherapistRepository.js';
-import {
-  DataStoreUnavailableError,
-  type TherapistRepository,
-} from './data/therapists/therapistRepository.js';
+import type { TherapistRepository } from './data/therapists/therapistRepository.js';
+import { DataStoreUnavailableError } from './data/storeErrors.js';
 import { getPrismaClient } from './lib/prisma.js';
 import { infrastructureHealthRoute } from './routes/health.js';
 
@@ -22,12 +22,13 @@ export interface BuildAppOptions {
   /** Browser origins allowed to call the API. */
   readonly corsOrigins?: readonly string[];
   /**
-   * The store the therapist routes read from. Injected rather than imported so
-   * that tests can supply an in-memory repository and never touch a database.
-   * When it is omitted the process still starts, liveness still answers, and
-   * the therapist routes answer 503.
+   * The stores the routes read from and write to. Injected rather than imported
+   * so that tests can supply in-memory repositories and never touch a database.
+   * When one is omitted the process still starts, liveness still answers, and
+   * the affected routes report 503.
    */
   readonly therapists?: TherapistRepository;
+  readonly intakes?: IntakeRepository;
 }
 
 /**
@@ -41,8 +42,46 @@ export function buildApp({
   logger = false,
   corsOrigins = [],
   therapists,
+  intakes,
 }: BuildAppOptions = {}): FastifyInstance {
   const app = Fastify({ logger });
+
+  // One error shape for the whole application API, including the two failures
+  // that would otherwise answer in Fastify's own words: a body that is not JSON,
+  // and a body that does not match a schema. The request is still logged, so
+  // nothing is lost for whoever is debugging.
+  app.setErrorHandler((error: unknown, request, reply) => {
+    // `error.statusCode` rather than `reply.statusCode`: a body that fails to
+    // parse arrives here before the reply has been given a status, and reading
+    // the wrong one turns a 400 into a 500.
+    // Fastify's own errors carry a status and a code; a thrown one may have
+    // neither, which is why both are read defensively rather than assumed.
+    const fastifyError = error as Partial<FastifyError>;
+    const status = typeof fastifyError.statusCode === 'number' ? fastifyError.statusCode : 500;
+    const code = typeof fastifyError.code === 'string' ? fastifyError.code : undefined;
+
+    if (status >= 400 && status < 500) {
+      request.log.warn({ err: error }, 'request rejected');
+      void reply.status(status).send({
+        statusCode: status,
+        error: status === 404 ? 'Not Found' : 'Bad Request',
+        message:
+          code === 'FST_ERR_CTP_INVALID_JSON_BODY'
+            ? 'The request was not readable as JSON.'
+            : error instanceof Error
+              ? error.message
+              : 'The request could not be understood.',
+      });
+      return;
+    }
+
+    request.log.error({ err: error }, 'request failed');
+    void reply.status(500).send({
+      statusCode: 500,
+      error: 'Internal Server Error',
+      message: 'Something went wrong.',
+    });
+  });
 
   if (corsOrigins.length > 0) {
     app.register(cors, { origin: [...corsOrigins] });
@@ -52,20 +91,24 @@ export function buildApp({
   app.register(v1Routes, {
     prefix: API_PREFIX,
     therapists: therapists ?? unavailableTherapistRepository(),
+    intakes: intakes ?? unavailableIntakeRepository(),
   });
 
   return app;
 }
 
-/** The production wiring: Prisma behind the repository port. */
+/** The production wiring: Prisma behind both repository ports. */
 export function buildAppWithStore({
   logger,
   corsOrigins,
 }: { logger?: { level: LogLevel }; corsOrigins?: readonly string[] } = {}): FastifyInstance {
+  const prisma = getPrismaClient();
+
   return buildApp({
     logger,
     corsOrigins,
-    therapists: createPrismaTherapistRepository(getPrismaClient()),
+    therapists: createPrismaTherapistRepository(prisma),
+    intakes: createPrismaIntakeRepository(prisma),
   });
 }
 
@@ -84,4 +127,12 @@ function unavailableTherapistRepository(): TherapistRepository {
     hasLanguage: unavailable,
     hasArea: unavailable,
   };
+}
+
+function unavailableIntakeRepository(): IntakeRepository {
+  const unavailable = (): never => {
+    throw new DataStoreUnavailableError('The intake store is not available.');
+  };
+
+  return { readVocabulary: unavailable, submit: unavailable };
 }

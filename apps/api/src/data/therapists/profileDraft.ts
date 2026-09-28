@@ -1,3 +1,5 @@
+import { isIanaTimezone } from '../validators.js';
+
 /**
  * Validation for a therapist profile at the moment it is written.
  *
@@ -38,15 +40,6 @@ const DAY_NAMES = new Set([
   'SATURDAY',
   'SUNDAY',
 ]);
-
-/**
- * A conservative IANA check. A real zone is `Area/Location`
- * (`Europe/London`), a sub-zone path (`America/Argentina/Buenos_Aires`), or one
- * of the few single-segment names. `GMT+5:30` and `nope` are not zones, and a
- * bare UTC offset is exactly what this model refuses to store.
- */
-const TIMEZONE_PATTERN = /^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+)+$/;
-const SINGLE_SEGMENT_ZONES = new Set(['UTC', 'GMT', 'Z', 'CET', 'EET', 'WET', 'EST', 'MST', 'HST']);
 
 export class InvalidProfileDraftError extends Error {
   constructor(readonly problems: readonly string[]) {
@@ -100,10 +93,6 @@ export function assertValidProfileDraft(draft: ProfileDraft): void {
   if (problems.length > 0) {
     throw new InvalidProfileDraftError(problems);
   }
-}
-
-function isIanaTimezone(value: string): boolean {
-  return TIMEZONE_PATTERN.test(value) || SINGLE_SEGMENT_ZONES.has(value);
 }
 
 function validateWindows(windows: ProfileDraft['availability']): string[] {
