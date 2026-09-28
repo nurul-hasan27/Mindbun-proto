@@ -64,10 +64,10 @@ Do not try to patch it in place.
 
 ## Branches
 
-| Branch | What lives there |
-| --- | --- |
-| `main` | Everything that has been finished and reviewed |
-| `feat/phase-N-…` | One phase, one branch, merged when it is done |
+| Branch           | What lives there                               |
+| ---------------- | ---------------------------------------------- |
+| `main`           | Everything that has been finished and reviewed |
+| `feat/phase-N-…` | One phase, one branch, merged when it is done  |
 
 A phase gets its own branch, and the branch is pushed before the work is reviewed —
 so a phase in progress is visible rather than a dozen unreviewable commits on `main`.
@@ -140,11 +140,11 @@ justify than running them.
 
 ### What the suites are for
 
-| Suite | Count | What only it can catch |
-| --- | --- | --- |
-| API unit | 317 | What the endpoints refuse, and what they refuse to send |
-| Web | 435 | What a person sees, and in what order they see it |
-| Database | 81 | Whether the *history* survives being written |
+| Suite    | Count | What only it can catch                                  |
+| -------- | ----- | ------------------------------------------------------- |
+| API unit | 317   | What the endpoints refuse, and what they refuse to send |
+| Web      | 435   | What a person sees, and in what order they see it       |
+| Database | 81    | Whether the _history_ survives being written            |
 
 The database suite is mostly read-back rather than assertions about return values. A
 service that writes the right row and a database that stores a different one pass
@@ -176,13 +176,13 @@ phase that introduced them.
 Roughly, in order:
 
 1. **Schema first**, if the domain needs it. A migration is committed; `migrate
-   dev` creates one. Never edit a migration that has been applied anywhere.
+dev` creates one. Never edit a migration that has been applied anywhere.
 2. **The domain module**, in `apps/api/src/data/<domain>/`. One concern per file,
    with the reasoning in the file rather than in a review comment.
 3. **A port and an adapter.** A service depends on the interface; only
    `app.ts` knows which implementation is wired.
 4. **A response schema** in `apps/api/src/api/v1/schemas/`, `additionalProperties:
-   false` on every field, with a TypeScript interface beside it. A field added on the
+false` on every field, with a TypeScript interface beside it. A field added on the
    service side and not declared here fails the API's own tests rather than quietly
    reaching a browser.
 5. **A route** in `apps/api/src/api/v1/routes/`, with its test beside it.
@@ -250,7 +250,7 @@ absence is a decision rather than an oversight.
 ## Documentation
 
 Docs live in `docs/` and each phase has one. They are long on purpose: `rematching.md`
-is nearly nine hundred lines because the reasoning *is* the deliverable, and a reader
+is nearly nine hundred lines because the reasoning _is_ the deliverable, and a reader
 six months from now needs to know why a weight is capped rather than only that it is.
 
 When a change makes a document wrong, fix the document in the same commit. A stale

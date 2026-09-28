@@ -366,13 +366,45 @@ No CSS-in-JS, no component library, no state library, no HTTP library (the platf
 `AbortController` is enough), no validation framework, no migration tool beyond Prisma, no
 `clsx` (there is a three-line `cx`), no `dotenv` in the service (Node loads it), no icon package.
 
-## 10. Phases 6 and 7, and what comes next
+## 10. Phases 6, 7 and 8, and what comes next
 
 Phase 6 is delivered: feedback, and a rematch that takes it into account. The full account is in
 [`rematching.md`](./rematching.md).
 
 Phase 7 is delivered too: the internal workspace where a matcher reviews a case and decides, in
 [`human-matching.md`](./human-matching.md).
+
+Phase 8 is polish and repository hygiene rather than new capability, and the one change to the
+shape of the system is worth recording here: **a first search now goes through `/matching`**,
+not straight to the recommendation.
+
+It did not before, because a first match had nowhere to wait — `/recommendation` asked for it
+and showed the result in the same place. That left the journey indicator promising a step that
+a first pass never visited: the header listed six steps and the path went from _the questions_
+to _the recommendation_. A small inconsistency a person notices without being able to name it.
+
+`/matching` already existed for a rematch, and already held the honest failures. It now takes
+a first search as well, and the two differ only in what is true to say: "leaving past the
+person you just turned down" is added for a rematch and never for a first pass, because a
+person who has not been shown anyone has not been shown anyone. No new endpoint, no new
+business logic, and the same effect-based pattern it already used.
+
+**What it costs, stated rather than glossed.** A first pass now calls `POST /api/v1/matches`
+twice: once on `/matching`, and once on `/recommendation` when it asks for the same thing.
+That is the price of a transition step that has something to wait for — without the first
+call the page would have nothing to hold and would flash, which is what routing around it was
+meant to avoid.
+
+The second call is a **retry, not a second search**, and the distinction is checkable rather
+than asserted: both responses are byte-identical including `decidedAt` (which comes from the
+stored row, not a fresh clock reading), and the database holds exactly one pass of fifty
+candidate rows afterwards. `recommendTherapist` reads the existing pass before it evaluates
+anything, so the engine does not run twice.
+
+The alternative — having the recommendation page render from the match record — was rejected
+because that record deliberately holds an id and a name rather than the evidence, and widening
+it would mean keeping a client's recommendation in `sessionStorage`, which is the opposite of
+what the privacy design is for.
 
 One prediction this document made before Phase 6 was wrong, and it is worth recording rather than
 quietly editing out. It said rematching would be _a new intake, not a mutation_. It is not: a

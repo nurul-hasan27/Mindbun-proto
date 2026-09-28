@@ -22,8 +22,8 @@ If the change is not visual, say so rather than leaving this empty.
 -->
 
 | 1440px | 320px |
-| --- | --- |
-|  |  |
+| ------ | ----- |
+|        |       |
 
 ## Tests
 

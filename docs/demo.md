@@ -51,34 +51,40 @@ that the journey costs exactly one request per endpoint.
 **The point:** the product's promise is that it can explain itself, and the
 explanation is generated from stored evidence rather than written beside it.
 
-1. **Landing page.** *A calmer way to find your therapist.*
+1. **Landing page.** _A calmer way to find your therapist._
+
    > "The page says 'Begin gently' rather than 'Get started'. That is the tone the
    > whole product is in — a person arriving here has usually had a hard month, and
    > the first thing we do is not ask them to hurry."
 
 2. **Start page.** Point at the pull quote.
+
    > "It says you do not need to know what approach you need. 'Structured' and
    > 'exploratory' are words therapy uses about itself, and someone arriving with a
    > hard month has every reason to think they are about to be asked to choose one."
 
 3. **The questions.** Click through, picking a couple of answers. **Leave one blank on
    purpose** and say so.
+
    > "Three of the seven are optional, and leaving one blank is a supported thing to
    > do rather than a failure. The review screen says so."
 
-4. **Review.** *You told us…*
+4. **Review.** _You told us…_
+
    > "Each answer has an Edit link. This is the moment where someone should feel
    > confident rather than like they have submitted a form — which is why the heading
    > is 'You told us' and not 'Summary'."
 
 5. **Finding a fit.**
+
    > "This step used to be skipped on a first pass, which meant the journey indicator
    > promised a step that never happened. It is honest about what it is doing and it
    > does not pretend to take longer than it does — the search is milliseconds, and a
    > spinner longer than that would be theatre."
 
-6. **The recommendation.** This is the important screen. Scroll to *Why we thought you
-   might connect*.
+6. **The recommendation.** This is the important screen. Scroll to _Why we thought you
+   might connect_.
+
    > "Every line is generated from a key that was stored when the match ran. Change the
    > wording in the vocabulary tomorrow and this page reads in tomorrow's words. There
    > is no score, no rank, no percentage and no other candidates — the response
@@ -91,7 +97,7 @@ explanation is generated from stored evidence rather than written beside it.
    > worse than one that says why. 'I'd like another option' is the live path. Note
    > the wording: nobody has assessed the person on the other side of it."
 
-**Optional: the profile link.** Click *Read more about…* to show the full editorial
+**Optional: the profile link.** Click _Read more about…_ to show the full editorial
 profile — monogram, biography, availability in their own timezone, and no photo
 because no real therapist has agreed to have one used.
 
@@ -104,7 +110,8 @@ exactly, and the client is never told anything false about it.
 
 1. From the recommendation, choose **I'd like another option**.
 
-2. **Feedback.** *Tell us what didn't quite fit.*
+2. **Feedback.** _Tell us what didn't quite fit._
+
    > "Read the five reasons. Every one describes the interaction, not the person:
    > 'the timing did not work for me', 'the communication style didn't feel right'.
    > There is no star rating, no thumbs, and no sentiment scale — a person who has
@@ -112,17 +119,20 @@ exactly, and the client is never told anything false about it.
 
 3. Tick **The communication style didn't feel right**, and write a sentence in the
    optional note.
+
    > "The note is optional and it is never logged. It is stored because the product is
    > built on someone being allowed to say more than a checkbox allows."
 
 4. **Look for someone else.** You land on a different person.
+
    > "The same deterministic engine, run again over the same intake, with two
    > differences: everyone already declined on this journey is left out, and the
    > categories the person mentioned count for more — up to a ceiling. That is the
    > entire mechanism."
 
 5. **What changed this time.** Read it aloud.
-   > "Notice what it does *not* say. It will only report a change when the person
+
+   > "Notice what it does _not_ say. It will only report a change when the person
    > mentioned it, the attributes really do differ, and the new person covers their
    > stated preference strictly better. Here it says the style changed 'though not in
    > a way you asked about' — which is true, and is the honest answer rather than a
@@ -142,11 +152,13 @@ exactly, and the client is never told anything false about it.
 
 1. Go to **http://localhost:5173/matching-workspace**. Say the word "internal" and
    the absence of authentication out loud.
+
    > "No login, no session, no token, and no fake login either. Anyone who can reach
    > this path can read every case. The paths are one greppable family, so putting it
    > behind a guard is one mount when there is something to guard with."
 
 2. **The queue.**
+
    > "A list of rows, not cards. Each row says who was suggested, which search it is,
    > and whether the client has already said what did not fit — and nothing else. An
    > earlier version put 'Needs review' on every row, which taught a matcher nothing
@@ -154,24 +166,28 @@ exactly, and the client is never told anything false about it.
 
 3. **Open a case.** Read the sections in order: client needs, the system suggestion,
    the alternatives, the decision, the history.
+
    > "The order is the order the questions get asked. Needs first, because every
    > judgement below is a judgement about fit, and fit means nothing without the
    > request."
 
-4. **The system suggestion.** Scroll to *Why this could work*.
+4. **The system suggestion.** Scroll to _Why this could work_.
+
    > "Same sentences the client will read, word for word — a reviewer reasoning from
    > different wording is reasoning from a different understanding. And under it, the
-   > line the engine's evidence cannot produce: what this person does *not* offer.
+   > line the engine's evidence cannot produce: what this person does _not_ offer.
    > The engine's evidence is positive-only, which is right for a client and wrong for
    > a reviewer."
 
 5. **The alternatives.** Four of them.
+
    > "The backend evaluates all fifty. Showing fifty would be a dump of the engine's
    > shortlist, and a matcher scrolling a list of fifty reads none of it. These four
    > are in the engine's own order — the score decided that order and then
    > disappeared; it is never on the page."
 
 6. **The decision.** Choose **Use this recommendation**.
+
    > "Two paths, in the same voice. Neither is marked correct. Choosing somebody else
    > asks why, because a decision with no stated reason leaves the audit trail
    > recording a disagreement it cannot explain."
@@ -192,24 +208,29 @@ sometimes wrong, the record stays honest, and the client is unaffected.
    is a good one — see the note below.
 
 2. **Read the system suggestion's gaps.**
+
    > "Here the engine has suggested somebody whose conversation style is not what the
    > client asked for. That is not a bug: a stated preference is a weight, not a gate,
    > so somebody can come out level on score with a person who does match it. It is
    > precisely the case a human matcher exists for."
 
 3. **Look at the alternatives.** Find the one whose style does match.
+
    > "A legitimate candidate with genuinely different strengths — not a worse version
    > of the same thing, and never a strawman."
 
 4. **Choose another therapist.** Tick **Better communication style**, and add a note.
+
    > "The note is stored with the decision, shown to nobody but the reviewer, and never
    > sent to the client."
 
 5. **Record it.**
+
    > "'The system had suggested X. That recommendation has not been changed — it is
    > still on the record, with its own evidence — but the client will be shown Y.'"
 
 6. **The journey.**
+
    > "System, human, client recommendation — three separate facts. The first is a row
    > in the database that nothing has touched, the second is a row beside it, and the
    > third is derived from those two rather than stored, so it cannot disagree with
@@ -218,6 +239,7 @@ sometimes wrong, the record stays honest, and the client is unaffected.
 7. **Verify the client is unaffected.** Go to `/recommendation` in the same tab.
 
    **This is the step to actually perform.** Read the person's name aloud. Then say:
+
    > "The client is shown the therapist the matcher chose, with that person's reasons.
    > They are not told a system was involved, that anything was reviewed, that anyone
    > disagreed, what the engine ranked first, or what the matcher wrote. The
@@ -259,13 +281,13 @@ creates a new one.
 
 Worth knowing in advance, because each is a control on a page and a reviewer will ask:
 
-| Control | Why |
-| --- | --- |
-| "This feels right" | Recording that a match felt right is not built. Present, focusable, and honest about it. |
-| "Revisit what you told us" | Loosening a requirement and searching again is real work on the matching side. Present, focusable, honest. |
+| Control                      | Why                                                                                                                      |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| "This feels right"           | Recording that a match felt right is not built. Present, focusable, and honest about it.                                 |
+| "Revisit what you told us"   | Loosening a requirement and searching again is real work on the matching side. Present, focusable, honest.               |
 | `/rematch` as a journey step | A second pass comes from the feedback loop. A step that exists only to be clicked is worse than one that does not exist. |
-| Therapist sign-in | No accounts, by design. |
-| Booking, messaging, payments | Out of scope. |
+| Therapist sign-in            | No accounts, by design.                                                                                                  |
+| Booking, messaging, payments | Out of scope.                                                                                                            |
 
 And one thing that is a real limitation rather than a placeholder: **there is no
 authentication on the workspace.** It is a prototype boundary, documented in

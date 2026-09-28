@@ -245,6 +245,33 @@ rather than at the code:
   horizontal scroll. Rows that stack do both: fields become lines when narrow, a grid puts them in
   columns when wide. Verified with no horizontal overflow at 320, 390, 834 and 1440.
 
+### Set a thing large when it is the subject of the page
+
+The one typographic rule Phase 8 had to add, and it came from a specific failure.
+
+The recommendation page set the therapist's areas of work in the display serif at heading
+size, one per line — directly beneath the evidence sentences, which are body-size sans. Three
+lines of display type read as three headings, so the section the page exists to communicate
+was handing its weight to a list of attributes. The profile page set the _same_ fields the
+same way, and there it read correctly, because there the person is the subject.
+
+So:
+
+|                            |                                            |
+| -------------------------- | ------------------------------------------ |
+| The subject of the page    | Large. The display serif, at heading size. |
+| Context for something else | Quiet. Body text, joined with middots.     |
+
+One rule, applied to two pages, and it puts the recommendation page in agreement with the
+reviewer's candidate card — which already rendered those fields as body text. Two surfaces
+showing one attribute list in two different type sizes is how they drift into disagreeing
+about what matters.
+
+The same reasoning governs the reviewer's queue: a row carries only what _differs_ between
+rows. Every row used to end with "Needs review", and since the endpoint returns undecided
+cases and nothing else, the status never varied — and a column that never varies teaches a
+matcher nothing while making every row longer to scan.
+
 ## 7. Motion
 
 Motion exists to explain a change of page, never to entertain.

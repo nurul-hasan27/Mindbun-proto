@@ -689,10 +689,39 @@ any kind.
 - Fonts: [Fraunces](https://fonts.google.com/specimen/Fraunces) and
   [Inter](https://fonts.google.com/specimen/Inter), both SIL Open Font License 1.1, self-hosted so
   the prototype makes no third-party requests.
-- `npm audit` reports advisories in Prisma's own CLI dependencies (`deepmerge-ts`, and a `mysql2`
-  this project never uses). They are not reachable from the running service, which depends on
-  `fastify`, `@prisma/client`, `@prisma/adapter-pg` and `pg`. Downgrading to Prisma 6 would be a
-  breaking change for the schema and config conventions, so it is documented rather than forced.
+
+### Dependency audit
+
+`npm audit --omit=dev` reports **4 high-severity advisories**, and they are recorded here
+rather than silenced, because "no advisories" achieved by forcing a downgrade is not the same
+as "no reachable risk".
+
+| Advisory                                                  | Comes from       | Reachable at runtime? |
+| --------------------------------------------------------- | ---------------- | --------------------- |
+| `deepmerge-ts` (via `@prisma/config`)                     | the `prisma` CLI | **No**                |
+| `mysql2` — auth-plugin downgrade, and a zlib inflate bomb | the `prisma` CLI | **No**                |
+
+The whole chain is `prisma` → `mysql2`, and `prisma` is a **devDependency** of the API. This
+project talks to PostgreSQL, so a MySQL driver is dead weight in the CLI's own dependency tree
+and nothing here can open a MySQL connection.
+
+Checked rather than assumed — the built service's own imports are:
+
+```
+fastify · @fastify/cors · @prisma/client · @prisma/adapter-pg
+```
+
+and `grep -r mysql2 apps/api/dist` finds nothing. The advisories are in the tool that reads
+`schema.prisma` during a migration.
+
+`npm audit fix --force` would install `prisma@6.19.3`. That is a **breaking change**: Prisma 7
+moved configuration into `prisma7.config.ts` and changed how the client receives its driver
+adapter, so the downgrade would mean rewriting the schema tooling and the client construction
+to silence warnings about code that never runs in production. That trade is not worth making,
+and the finding is documented instead.
+
+Re-checked on every dependency change; the numbers above are from the current lockfile.
+
 - This prototype is not medical advice and not a healthcare service.
 
 ---
