@@ -20,6 +20,8 @@ import type { RematchRecommendation } from '../lib/api/types';
  */
 
 const INTAKE_ID = '0199a1c2-3d4e-5f60-8712-93a4b5c6d7ea';
+const FIRST_MATCH_ID = '0199a1c2-3d4e-5f60-8712-93a4b5c6d7f9';
+const FIRST_THERAPIST_ID = '0199a1c2-3d4e-5f60-8712-93a4b5c6d7f8';
 const PREVIOUS_MATCH_ID = '0199a1c2-3d4e-5f60-8712-93a4b5c6d7ec';
 const MATCH_ID = '0199a1c2-3d4e-5f60-8712-93a4b5c6d7eb';
 const THERAPIST_ID = '0199a1c2-3d4e-5f60-8712-93a4b5c6d7ed';
@@ -52,6 +54,33 @@ const RECOMMENDATION: RematchRecommendation = {
 
 const NOTHING_LEFT = { outcome: 'no_candidate', considered: 0 };
 
+/** A first pass: one person, their reasons, and nobody to have come before them. */
+const FIRST_MATCH = {
+  matchId: FIRST_MATCH_ID,
+  decidedAt: '2026-09-30T09:00:05.000Z',
+  attempt: 1,
+  previousTherapistName: null,
+  therapist: {
+    id: FIRST_THERAPIST_ID,
+    displayName: 'Aditi Raghunathan',
+    headline: 'Warm, curious, reflective',
+    bio: 'A biography.',
+    location: 'Bengaluru, India',
+    timezone: 'Asia/Kolkata',
+    yearsOfExperience: 9,
+    languages: [{ key: 'hi', name: 'Hindi' }],
+    areasOfWork: [{ key: 'relationships', name: 'Relationships' }],
+    communicationStyles: [{ key: 'exploratory', name: 'Exploratory' }],
+    approaches: [],
+    contextualExperience: [{ key: 'indian-diaspora', name: 'Indian diaspora' }],
+    sessionFormats: [{ key: 'online', name: 'Online' }],
+    availability: [],
+  },
+  whyThisMatch: [{ key: 'REQUIRED_LANGUAGE', sentence: 'They speak Hindi.', detail: 'Hindi' }],
+  whatChanged: [],
+  adjustedFor: [],
+};
+
 interface Options {
   readonly status?: number;
   /** The request never lands at all, as opposed to being refused. */
@@ -62,6 +91,14 @@ interface Options {
   /** Held back forever, for a test that only cares about the waiting state. */
   readonly never?: boolean;
   readonly withMatchRecord?: boolean;
+  /**
+   * Answers stored, nobody shown yet.
+   *
+   * Distinct from `withMatchRecord`, which stores a recommendation too — that is a
+   * rematch, and the page takes a different path for it. A first pass has a receipt and
+   * no match, and conflating the two is how a test ends up passing for the wrong reason.
+   */
+  readonly withReceiptOnly?: boolean;
 }
 
 let release: () => void = () => undefined;
@@ -85,7 +122,10 @@ function stubApi(options: Options = {}): void {
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : 'url' in input ? input.url : '';
 
-      if (url.includes('/rematch')) {
+      // A first search and a rematch are the same page asking different questions, so the
+      // stub answers both. The one thing they must never share is an endpoint: a first pass
+      // has no match to replace, so it asks for a match.
+      if (url.includes('/rematch') || url.endsWith('/matches')) {
         requests.push({
           url,
           method: init?.method ?? 'GET',
@@ -104,7 +144,13 @@ function stubApi(options: Options = {}): void {
           await gate;
         }
 
-        return respond(options.body ?? RECOMMENDATION, options.status ?? 200);
+        // The right shape for the right endpoint: a first pass gets a recommendation, a
+        // rematch gets a rematch. Handing one to the other leaves the page searching
+        // forever, which is a confusing way for a stub to be wrong.
+        return respond(
+          options.body ?? (url.endsWith('/matches') ? FIRST_MATCH : RECOMMENDATION),
+          options.status ?? 200,
+        );
       }
 
       if (url.includes('/health')) {
@@ -114,6 +160,10 @@ function stubApi(options: Options = {}): void {
       return respond(null, 404);
     }),
   );
+
+  if (options.withReceiptOnly === true) {
+    saveReceipt({ intakeId: INTAKE_ID, receivedAt: '2026-09-30T09:00:00.000Z' });
+  }
 
   if (options.withMatchRecord === true) {
     saveReceipt({ intakeId: INTAKE_ID, receivedAt: '2026-09-30T09:00:00.000Z' });
@@ -437,14 +487,70 @@ describe('when a later pass already exists', () => {
   });
 });
 
-describe('when there is no match to look again from', () => {
+describe('a first search, with answers but nobody to look past', () => {
+  it('searches, and hands the person on to the recommendation', async () => {
+    stubApi({ withReceiptOnly: true });
+    const { router } = renderRoute(paths.matching);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(paths.recommendation));
+
+    // A first pass asks for a match rather than a rematch. The two are different requests
+    // to different endpoints, and a first search has no match id to replace.
+    const posts = requests.filter((entry) => entry.method === 'POST');
+    expect(posts.some((entry) => entry.url.endsWith('/matches'))).toBe(true);
+    expect(posts.some((entry) => entry.url.includes('/rematch'))).toBe(false);
+
+    // And the record it leaves is the simplest one the type allows: there is nobody to look
+    // past, so nothing is remembered, and "what changed" has nothing to compare against.
+    const record = loadMatch();
+    expect(record).toMatchObject({
+      matchId: FIRST_MATCH_ID,
+      attempt: 1,
+      previousMatchId: null,
+      previousTherapistName: null,
+    });
+  });
+
+  it('says it is looking for a fit, not looking again', async () => {
+    stubApi({ withReceiptOnly: true, never: true });
+    renderRoute(paths.matching);
+
+    // "Again" would be false: this person has not been shown anyone yet. A page that says
+    // it is showing them someone again has described their own position wrongly.
+    expect(await screen.findByText('Finding a fit')).toBeVisible();
+    expect(screen.queryByText('Looking again')).toBeNull();
+    expect(
+      screen.getByText(/looking through the therapists who may fit, using what you told us/i),
+    ).toBeVisible();
+  });
+
+  it('reports honestly when nobody in the pool qualifies', async () => {
+    stubApi({ withReceiptOnly: true, body: { outcome: 'no_candidate', considered: 50 } });
+    renderRoute(paths.matching);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: /couldn’t find another fit/i }),
+    ).toBeVisible();
+
+    // No stranger to go back to, and no person to name. "Back to Ananya Mehra" on a
+    // first pass would name somebody this person has never been shown.
+    expect(screen.queryByRole('link', { name: /back to [A-Z]/ })).toBeNull();
+    expect(screen.getByRole('link', { name: /back to your answers/i })).toHaveAttribute(
+      'href',
+      paths.intake,
+    );
+  });
+});
+
+describe('when this tab holds nothing to search from at all', () => {
   it('says so, and starts from the questions', async () => {
     stubApi();
     renderRoute(paths.matching);
 
-    await screen.findByRole('heading', { level: 1, name: /no recommendation to look past/i });
+    await screen.findByRole('heading', { level: 1, name: /nothing here to search yet/i });
 
-    // It must not search, or it would be inventing a match to replace.
+    // It must not search: with neither a recommendation to replace nor answers of the
+    // person's own, there is nothing to look through and nothing to invent.
     expect(requests).toHaveLength(0);
     expect(screen.getByRole('link', { name: /start the questions/i })).toHaveAttribute(
       'href',
@@ -463,7 +569,7 @@ describe('on a small screen', () => {
     // `max-w-measure` is the project's typographic measure. On a 320px screen a wider
     // measure is unreadable, and this is the page someone is most likely to be staring
     // at on a phone.
-    expect(screen.getByText(/looking through the therapists who may fit, using/i)).toHaveClass(
+    expect(screen.getByText(/looking through the therapists who may fit/i)).toHaveClass(
       'max-w-measure',
     );
   });

@@ -32,10 +32,23 @@ export function StartPage() {
             Let’s start with what you’re looking for.
           </h1>
 
+          {/*
+            Two things this page has to do before the first question, and both are about
+            permission rather than information.
+
+            The first is that nobody knows what an approach is. "Structured", "exploratory",
+            "solution-focused" are words therapy uses about itself, and a person arriving
+            with a hard month and no vocabulary has every reason to think they are about to
+            be asked to choose one. Saying plainly that they do not have to know is the
+            difference between an intake and a test.
+
+            The second is that skipping is allowed. Not as an apology — as a fact.
+          */}
           <p className="text-lead max-w-measure text-ink-muted mt-6 text-pretty">
             Tell us what matters to you — the kind of support that fits, what you’d like to work on,
-            and anything that would help you feel comfortable. Plain language is perfect, and you
-            can leave anything out.
+            and anything that would help you feel comfortable. You don’t need to know what approach
+            you need, or any of the words therapists use for them. Plain language is better, and you
+            can leave any question blank.
           </p>
 
           <figure className="rounded-panel border-line bg-surface shadow-whisper mt-12 border p-7 sm:p-9">

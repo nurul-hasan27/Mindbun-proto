@@ -316,7 +316,12 @@ function IntakeConfirmation({
               claiming something the page behind it has not done. The hedge is
               also the product's own — the loading copy says the same.
             */}
-            <ButtonLink to={paths.recommendation} trailing={<ArrowGlyph />}>
+            {/*
+              Through `/matching`, not straight to the recommendation. The journey lists
+              six steps and this is the hand-off into the third of them; linking past it
+              made the header promise a step that a first pass never visited.
+            */}
+            <ButtonLink to={paths.matching} trailing={<ArrowGlyph />}>
               See who may fit
             </ButtonLink>
             <QuietButton onClick={onStartAgain}>Start again</QuietButton>

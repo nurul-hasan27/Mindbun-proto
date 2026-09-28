@@ -172,30 +172,43 @@ function Recommendation({ recommendation }: { readonly recommendation: MatchReco
 
         <WhatChanged notes={recommendation.whatChanged} />
 
+        {/*
+          Quietly, and this is the point.
+
+          These four were set in the display serif at heading size, one area of work per
+          line. On a profile page that reads well, because there the person *is* the
+          subject. Here it is not: the subject is the reasoning, three sections above. And
+          because the areas came straight after the evidence sentences, three lines of
+          display type read as three headings — so the section the whole page exists to
+          communicate was visually handing its weight to a list of attributes.
+
+          So the attributes are body text here, and stay in the serif on the profile. One
+          rule, applied to two pages: set a thing large when it is the subject of the page,
+          and quietly when it is context for something else. It also puts this page in
+          agreement with the reviewer's candidate card, which already rendered the same
+          fields this way — two surfaces showing one attribute list in two different type
+          sizes is how they drift into disagreeing about importance.
+        */}
         <ProfileSection label="Works with">
-          <ul className="flex flex-col gap-3">
-            {therapist.areasOfWork.map((area) => (
-              <li key={area.key} className="font-display text-heading text-ink">
-                {area.name}
-              </li>
-            ))}
-          </ul>
+          <p className="text-body text-ink">
+            {joinNames(therapist.areasOfWork.map((a) => a.name))}
+          </p>
         </ProfileSection>
 
         <ProfileSection label="How they show up">
-          <p className="font-display text-subheading text-ink text-balance">
+          <p className="text-body text-ink">
             {joinNames(therapist.communicationStyles.map((style) => style.name))}
           </p>
         </ProfileSection>
 
         <ProfileSection label="Languages">
-          <p className="font-display text-subheading text-ink">
+          <p className="text-body text-ink">
             {joinNames(therapist.languages.map((language) => language.name))}
           </p>
         </ProfileSection>
 
         <ProfileSection label="Sessions">
-          <p className="font-display text-subheading text-ink">
+          <p className="text-body text-ink">
             {joinNames(therapist.sessionFormats.map((format) => format.name))}
           </p>
         </ProfileSection>

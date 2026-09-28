@@ -182,6 +182,48 @@ describe('a recommendation', () => {
     }
   });
 
+  it('sets the therapist’s attributes quietly, so the reasons stay the loudest thing', async () => {
+    stubMatch();
+    withReceipt();
+    renderRoute(paths.recommendation);
+
+    await screen.findByRole('heading', { level: 2, name: 'Ananya Mehra' });
+
+    // These four were display-serif at heading size, one area of work per line. On a
+    // profile page that is right, because there the person is the subject. Here the
+    // subject is the reasoning three sections above, and three lines of display type read
+    // as three headings — handing the page's weight to a list of attributes.
+    //
+    // So the rule this pins is: set a thing large when it is the subject of the page, and
+    // quietly when it is context for something else.
+    for (const label of ['Works with', 'How they show up', 'Languages', 'Sessions']) {
+      const section = screen.getByRole('heading', { name: label }).closest('section');
+      const value = section?.querySelector('p, li');
+
+      expect(value, `${label} should have a value`).not.toBeNull();
+      expect(value?.className, `${label} should not be set as a heading`).not.toMatch(
+        /font-display|text-heading|text-subheading|text-title/,
+      );
+    }
+  });
+
+  it('gives the reasons the largest type on the page after the person’s name', async () => {
+    stubMatch();
+    withReceipt();
+    renderRoute(paths.recommendation);
+
+    await screen.findByRole('heading', { level: 2, name: 'Why we thought you might connect' });
+
+    // Not a number, not a claim of strength: the reasons are simply what this page is for,
+    // and the hierarchy should say so before a reader has to work it out.
+    const heading = screen.getByRole('heading', {
+      level: 2,
+      name: 'Why we thought you might connect',
+    });
+
+    expect(heading.className).toMatch(/text-heading/);
+  });
+
   it('links to the full profile', async () => {
     stubMatch();
     withReceipt();

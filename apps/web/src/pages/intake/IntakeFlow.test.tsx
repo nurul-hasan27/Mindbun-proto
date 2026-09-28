@@ -655,7 +655,7 @@ describe('sending', () => {
     expect(screen.queryByText(/we found|your match|matched you/i)).not.toBeInTheDocument();
   });
 
-  it('leads onward to the recommendation, and nowhere else does', async () => {
+  it('leads onward through the search step, and nowhere else does', async () => {
     setup();
     await renderIntake(paths.intake);
 
@@ -665,7 +665,10 @@ describe('sending', () => {
 
     const onward = await screen.findByRole('link', { name: /see who may fit/i });
 
-    expect(onward).toHaveAttribute('href', paths.recommendation);
+    // Through `/matching`, not straight to the recommendation. The journey lists six steps
+    // and this is the hand-off into the third; linking past it meant a first pass went from
+    // the questions to the recommendation, and the header promised a step nobody visited.
+    expect(onward).toHaveAttribute('href', paths.matching);
   });
 
   it('keeps a reference to what was stored, and nothing else', async () => {

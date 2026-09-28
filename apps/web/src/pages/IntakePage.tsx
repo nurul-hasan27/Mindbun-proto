@@ -12,7 +12,7 @@ export function IntakePage() {
     <JourneyPlaceholder
       stepId="intake"
       title="Let’s begin with what matters to you."
-      description="A few open questions, one at a time, in whatever words come naturally. No forms scored behind your back, and nothing you would be asked to reveal before you are ready."
+      description="A few open questions, one at a time, in whatever words come naturally. Nothing is being measured behind your back, and nothing you would be asked to reveal before you are ready."
     />
   );
 }
