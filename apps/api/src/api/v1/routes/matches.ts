@@ -1,15 +1,13 @@
 import type { FastifyPluginCallback, FastifyReply } from 'fastify';
 import { isUuid } from '../../../data/validators.js';
 import { recommendTherapist } from '../../../data/matching/matchService.js';
+import type { FeedbackRepository } from '../../../data/matching/feedbackRepository.js';
 import type { MatchRepository } from '../../../data/matching/matchRepository.js';
 import type { TherapistRepository } from '../../../data/therapists/therapistRepository.js';
 import { DataStoreUnavailableError } from '../../../data/storeErrors.js';
-import {
-  matchResponseSchema,
-  noCandidateResponseSchema,
-  type MatchResponse,
-  type NoCandidateResponse,
-} from '../schemas/matches.js';
+import { matchResponseSchema } from '../schemas/matches.js';
+import type { NoCandidateResponse, RecommendationResponse } from '../schemas/recommendation.js';
+import { toRecommendation } from './recommendationBody.js';
 import { errorResponseSchema, type ErrorResponse } from '../schemas/therapists.js';
 
 /**
@@ -25,12 +23,25 @@ import { errorResponseSchema, type ErrorResponse } from '../schemas/therapists.j
  * not for a browser.
  *
  * The engine runs on the server, in one place, and the answer it gives is the answer.
+ *
+ * ## It answers with the *current* recommendation
+ *
+ * If a rematch has already happened on this intake, this is the newest pass — the
+ * person the client is actually on. Returning the first pass would show them the
+ * person they just turned down, which is the opposite of what they asked for.
+ *
+ * ## It is safe to call more than once
+ *
+ * An existing pass is returned unchanged rather than recomputed. The engine is
+ * deterministic, so a second run could not produce a different answer, and writing a
+ * second pass at the same number would imply it might. Asking for another option is a
+ * different request, with a different endpoint, and it writes the *next* pass.
  */
 const MATCH_DOCS = {
   tags: ['matching'],
   summary: 'Find someone who may fit, and say why',
   description:
-    'Runs the matching engine over the stored intake for that id, records every candidate it considered, and answers with one person and the reasons. Safe to call more than once: an intake is evaluated once and the stored decision is returned again.',
+    'Runs the matching engine over the stored intake for that id, records every candidate it considered, and answers with one person and the reasons. Safe to call more than once: an existing decision is returned again rather than recomputed. If this intake has already been rematched, you get the most recent recommendation.',
 } as const;
 
 function badRequest(message: string): ErrorResponse {
@@ -40,6 +51,12 @@ function badRequest(message: string): ErrorResponse {
 export function buildMatchRoutes(
   matches: MatchRepository,
   therapists: TherapistRepository,
+  /**
+   * Only used to answer "what changed" after a rematch. A caller without one still
+   * gets a correct recommendation, with an empty section — which is a gap rather than
+   * a guess, and is documented as such on `RecommendDeps`.
+   */
+  feedback?: FeedbackRepository,
 ): FastifyPluginCallback {
   return (app, _options, done) => {
     app.post(
@@ -57,9 +74,7 @@ export function buildMatchRoutes(
             // it deserves a sentence instead. See `unknownFields` below.
           },
           response: {
-            200: {
-              oneOf: [matchResponseSchema, noCandidateResponseSchema],
-            },
+            200: matchResponseSchema,
             400: errorResponseSchema,
             404: errorResponseSchema,
             503: errorResponseSchema,
@@ -94,7 +109,11 @@ export function buildMatchRoutes(
         }
 
         try {
-          const outcome = await recommendTherapist(intakeId, { matches, therapists });
+          const outcome = await recommendTherapist(intakeId, {
+            matches,
+            therapists,
+            ...(feedback === undefined ? {} : { feedback }),
+          });
 
           if (outcome.kind === 'unknown-intake') {
             return await reply.status(404).send({
@@ -113,39 +132,7 @@ export function buildMatchRoutes(
             return await reply.send(nothingQualified);
           }
 
-          const { matchId, decidedAt, therapist, evidence } = outcome.result;
-
-          const found: MatchResponse = {
-            matchId,
-            decidedAt,
-            therapist: {
-              id: therapist.id,
-              displayName: therapist.displayName,
-              headline: therapist.headline,
-              bio: therapist.bio,
-              location: therapist.location,
-              timezone: therapist.timezone,
-              yearsOfExperience: therapist.yearsOfExperience,
-              languages: therapist.languages.map(attribute),
-              areasOfWork: therapist.areasOfWork.map(attribute),
-              communicationStyles: therapist.communicationStyles.map(attribute),
-              approaches: therapist.approaches.map(attribute),
-              contextualExperience: therapist.contextualExperience.map(attribute),
-              sessionFormats: therapist.sessionFormats.map(attribute),
-              availability: therapist.availability.map((window) => ({
-                dayOfWeek: window.dayOfWeek,
-                startMinute: window.startMinute,
-                endMinute: window.endMinute,
-              })),
-            },
-            whyThisMatch: evidence.map((item) => ({
-              key: item.key,
-              sentence: item.sentence,
-              detail: item.detail,
-            })),
-          };
-
-          return await reply.send(found);
+          return await reply.send(toRecommendation(outcome.result));
         } catch (error) {
           return sendStoreFailure(app, reply, error);
         }
@@ -154,10 +141,6 @@ export function buildMatchRoutes(
 
     done();
   };
-}
-
-function attribute(entry: { key: string; name: string }): { key: string; name: string } {
-  return { key: entry.key, name: entry.name };
 }
 
 /** Field names in the body that this endpoint does not accept. */
@@ -179,7 +162,7 @@ function readIntakeId(body: unknown): string {
   return typeof body.intakeId === 'string' ? body.intakeId : '';
 }
 
-function sendStoreFailure(
+export function sendStoreFailure(
   app: { log: { error: (payload: unknown, message?: string) => void } },
   reply: FastifyReply,
   error: unknown,
@@ -200,3 +183,5 @@ function sendStoreFailure(
     message: 'Something went wrong while finding your match.',
   });
 }
+
+export type { RecommendationResponse };

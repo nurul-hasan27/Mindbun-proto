@@ -47,14 +47,30 @@ import type { MatchCategory, MatchExplanation, PreferenceStrength } from './matc
  */
 
 /**
+/**
+ * The most any one category can count for, as a multiple of its base.
+ *
+ * Feedback can raise a preference's importance, and a boost with no ceiling would let
+ * one sentence outweigh everything else. Two times the base is enough to make a
+ * mentioned preference outrank an unmentioned one — which is the whole intent — and not
+ * enough to turn a preference into something that behaves like a requirement.
+ *
+ * `maxCategoryScore` enforces it, and `REQUIREMENT_BONUS` is set above the largest total
+ * this can possibly produce, so the invariant "a requirement outranks every preference
+ * put together" survives a rematch. Both are asserted by tests rather than assumed.
+ */
+export const FEEDBACK_BOOST_CEILING = 2;
+
+/**
  * What a satisfied requirement is worth, above everything else combined.
  *
- * Deliberately larger than the sum of every category maximum, so the property is
- * arithmetic rather than a hope: a candidate who meets what the client insisted on
- * always outranks a candidate who merely shares more interests, however many
- * interests there are to share. A test asserts the inequality.
+ * Deliberately larger than the largest total the preference field can reach *after* any
+ * feedback, so the property is arithmetic rather than a hope: a candidate who meets what
+ * the client insisted on always outranks a candidate who merely shares more interests,
+ * however many interests there are and however much they have been boosted. A test
+ * asserts the inequality against the boosted maximum, not the base one.
  */
-export const REQUIREMENT_BONUS = 250;
+export const REQUIREMENT_BONUS = 600;
 
 /**
  * The most each category of preference can contribute, chosen to encode a stated
@@ -169,6 +185,61 @@ export const MAX_SHOWN_PER_CATEGORY: Readonly<Record<MatchCategory, number>> = {
   SESSION_FORMAT: 1,
   AVAILABILITY: 2,
 };
+
+/**
+ * The most a category can contribute, with any feedback boost applied and capped.
+ *
+ * The cap is what stops a boost becoming a requirement. Without it, a large enough
+ * boost would dominate the ordering on its own, and the engine would behave as though
+ * the person had insisted on that thing — which is a different statement, and one they
+ * did not make.
+ */
+export function maxCategoryScore(
+  category: MatchCategory,
+  increments: Readonly<Partial<Record<MatchCategory, number>>> = {},
+): number {
+  const base = CATEGORY_MAX_SCORE[category];
+
+  if (base === 0) {
+    return 0;
+  }
+
+  return Math.min(base + (increments[category] ?? 0), base * FEEDBACK_BOOST_CEILING);
+}
+
+/** The most availability can contribute per shared day, after a boost. */
+export function maxAvailabilityPerDay(
+  increments: Readonly<Partial<Record<MatchCategory, number>>> = {},
+): number {
+  return Math.min(
+    AVAILABILITY_PER_DAY + (increments.AVAILABILITY ?? 0),
+    AVAILABILITY_PER_DAY * FEEDBACK_BOOST_CEILING,
+  );
+}
+
+/**
+ * The largest total the preference field can possibly reach, whatever the feedback.
+ *
+ * Exists for one purpose: to keep `REQUIREMENT_BONUS` honest. The requirement must
+ * outrank the whole preference field, and the only way to be sure of that after a
+ * rematch is to compute the ceiling rather than eyeball the current totals. Availability
+ * is handled separately because it has no base maximum to double — it is a per-day
+ * figure under its own day cap, and the cap does not rise.
+ */
+export function maximumPreferenceTotal(
+  increments: Readonly<Partial<Record<MatchCategory, number>>> = {},
+): number {
+  const categories = Object.keys(CATEGORY_MAX_SCORE).filter(
+    (category) => CATEGORY_MAX_SCORE[category as MatchCategory] > 0,
+  );
+
+  const attributes = categories.reduce(
+    (sum, category) => sum + maxCategoryScore(category as MatchCategory, increments),
+    0,
+  );
+
+  return attributes + AVAILABILITY_DAY_CAP * maxAvailabilityPerDay(increments);
+}
 
 /**
  * The score for one category, as a proportion of what the client asked for.

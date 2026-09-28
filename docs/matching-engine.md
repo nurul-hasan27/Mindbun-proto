@@ -123,9 +123,18 @@ Two parts, and only two. Both in [`weights.ts`](../apps/api/src/data/matching/we
 **Requirements are flat.** A satisfied requirement is worth `REQUIREMENT_BONUS`, and there are at
 most two. Flat, because a requirement is not a matter of degree: a session in a shared language
 either happens or it does not, and half-credit would be a strange thing to show anyone. The amount
-is set above the sum of every category maximum, so the property is arithmetic rather than a hope: a
-candidate who meets what the client insisted on always outranks one who merely shares more
-interests, however many interests there are. A test asserts the inequality.
+is set above the largest total the preference field can reach, so the property is arithmetic
+rather than a hope: a candidate who meets what the client insisted on always outranks one who
+merely shares more interests, however many interests there are and however much they have been
+boosted. A test asserts the inequality against the _boosted_ maximum, not the base one.
+
+That test matters more than it looks. Feedback can raise a preference's importance, so the ceiling
+a requirement has to dominate is itself now a variable — which is why `REQUIREMENT_BONUS` is
+compared against `maximumPreferenceTotal(increments)` rather than a fixed sum. When feedback was
+added, that ceiling moved from 220 to 560 and the bonus moved from 250 to 600 with it. The change
+is behaviourally inert for ordering: the bonus is added uniformly to every _eligible_ candidate, so
+it cannot reorder them. It only asserts that a requirement outranks a preference, which is the
+point. See [`rematching.md`](rematching.md).
 
 **Preferences are a proportion, capped.** For each category the client actually asked about:
 
@@ -136,6 +145,13 @@ floor( MAX_CATEGORY_SCORE × matchedKeys / keysTheClientChose )
 A _proportion_, so "matches three of the three areas you named" cannot be beaten by "matches six of
 the six areas you named" by asking more. Capped, so no single category can dominate. A client who
 asked for nothing in a category scores nothing in it — there is nothing to have matched.
+
+**Feedback can raise a category's maximum, and it is still capped.** When someone says a category
+did not work, that category counts for more in the next pass — up to twice its base, never past
+it. The ceiling is what stops a boost becoming a requirement: without it, a large enough boost
+would dominate the ordering on its own and the engine would behave as though the person had
+insisted on that thing, which is a different statement and one they did not make. `maxCategoryScore`
+enforces it, and it changes no evidence and no requirement — only the weight.
 
 | Category                | Max                          | Why this number                                                                        |
 | ----------------------- | ---------------------------- | -------------------------------------------------------------------------------------- |
@@ -375,6 +391,25 @@ being a marketplace should make that structurally true rather than a matter of r
 The therapist's `id` _is_ sent, for one stated reason: the profile page needs it to link, and
 `GET /therapists/:id` is already public. It is a link, not a ranking.
 
+### More than one pass per intake
+
+An intake can be evaluated more than once, because asking for another option is a thing the
+product does. `Match.attempt` is the pass number, and the unique index is
+`(intakeId, attempt, therapistId)` rather than `(intakeId, therapistId)` — so a candidate is
+evaluated at most once per _pass_ rather than once ever, and a retry still cannot write a second
+pass at the same number.
+
+The same table is both the current recommendation and the history. `status: 'RECOMMENDED'` marks
+the one the person was shown; a match that was offered and turned down becomes `DECLINED`, which is
+the only transition in the system. Nothing is overwritten: pass 1 keeps its evidence and its
+score after pass 2 exists, so the decision is inspectable at every step and not only the first.
+
+One consequence is worth knowing about, because it was a real bug: `DECLINED` can only follow
+`RECOMMENDED`, so a pass whose recommendation has been declined must still report that
+recommendation when it is read back. Looking only for `RECOMMENDED` made the next page lose the
+name of the person the client had come away from. See
+[`rematching.md` → match history](rematching.md#match-history).
+
 ### The internal representation
 
 `CandidateTrace` carries the name, eligibility, rejection code, internal score, the evidence keys and
@@ -394,12 +429,23 @@ exists to hold it.
 POST /api/v1/matches
 { "intakeId": "…" }
 
-200 → { matchId, decidedAt, therapist: { … }, whyThisMatch: [ { key, sentence, detail } ] }
+200 → { matchId, decidedAt, attempt, previousTherapistName, therapist: { … },
+        whyThisMatch: [ { key, sentence, detail } ],
+        whatChanged: [ { category, sentence, detail } ],
+        adjustedFor: [ … ] }
 200 → { outcome: "no_candidate", considered: 50 }
 400 → that is not a reference we have
 404 → we do not have an intake with that reference
 503 → we could not reach where matches are recorded
 ```
+
+`attempt`, `previousTherapistName`, `whatChanged` and `adjustedFor` are all present on a first
+match too, as `1`, `null`, `[]` and `[]`. Every field is declared in one shared schema — the same
+one `POST /matches/:matchId/rematch` uses — and `additionalProperties: false` on all of them, so
+adding a score to either fails the API's own tests rather than reaching a browser.
+
+**The answer is the _latest_ pass, not the first.** After a rematch, the current recommendation is
+the newest one; returning the first would show someone the person they just turned down.
 
 **The body is `{ intakeId }` and nothing else.** There is no way to ask "does this therapist match
 me?", because that would put the decision in the place it must not be. A caller who wants to know
@@ -454,10 +500,28 @@ identifier, and nothing the client wrote. The API's own log output for the whole
 request ids, methods, urls and status codes — and no query text and no intake payload, because Prisma
 is configured to log `warn`/`error` events only, never query arguments.
 
-Three candidates in the seed satisfy Hindi + exploratory + Indian diaspora. The one the engine chose
-has direct/structured/warm rather than exploratory, and the page does not pretend otherwise: the
-profile section says "Direct · Structured · Warm" in plain sight, and the reasons are only the ones
-that genuinely held.
+Three candidates in the seed satisfy Hindi + exploratory + Indian diaspora. The one the engine
+chose first has direct/structured/warm rather than exploratory, and the page does not pretend
+otherwise: the profile section says "Direct · Structured · Warm" in plain sight, and the reasons
+are only the ones that genuinely held. This was left alone rather than fixed, because hand-tuning
+the seed to flatter the demo would be dishonest about what the engine does.
+
+Phase 6 makes that observation actionable rather than merely noted. Turning the scenario into a
+real feedback loop, the second pass is Aditi Raghunathan — Hindi, exploratory, diaspora — and the
+"what changed" section says exactly that, and only that:
+
+> You told us the way they talked was not right, and this therapist works more in the Exploratory
+> style you were after.
+
+Four more declines continue the same way, each with a different sentence and each true only of
+what it claims. On a third round, where the next person happens to be _less_ exploratory than the
+one before, the section says so instead:
+
+> This therapist works differently here, though not in a way you asked about.
+
+That is the whole of this phase's contribution to the demo: the same engine, told what did not
+work, re-running and being able to say precisely what moved — including when what moved was
+further from what was asked for.
 
 ---
 
@@ -480,13 +544,36 @@ Stated plainly, because a prototype that hides its limits is not demonstrating t
   holidays, sickness, or a therapist who is away in March.
 - **Two reference weeks.** A zone with an unusual DST rule, or a rule that changed recently, might
   have an offset on some day that neither January nor July exercises.
-- **One recommendation, and no way to ask for another.** Rematching is the next phase. The control is
-  present, focusable, and says it is not built yet.
+- **Feedback re-weights; it does not learn.** "We took your feedback into account" is true of a set
+  difference and a capped re-weighting, and of nothing else. Nobody told us what they wanted
+  _instead_, so there is nothing to learn — see
+  [`rematching.md` → what it does not do](rematching.md#feedback--matching-signals).
+- **A feedback boost is not clinically validated either.** It has the same standing as every other
+  weight here: a documented prototype heuristic, argued about in source, tested against no outcome.
 - **Fifty candidates.** The engine is a fold, so it scales, but the seed is small and nothing about
   the _presentation_ has been tested against a genuinely long list — because a list of fifty would
   not be shown anyway.
 
-## 14. Where this goes next
+## 14. What feedback changed, and what it did not
+
+Phase 6 extended this engine rather than adding a second one, and the two inputs are the whole
+of it: an exclusion set, and a set of weight increments. Neither is a new pipeline stage, and
+neither changes how the engine compares anything — a first match is this pipeline with an empty
+exclusion set and no increments.
+
+The properties above survive a rematch unchanged, and each has a test that pins it:
+
+- **The requirements are still derived from the intake alone.** `deriveRequirements` is not
+  reachable from anything in the feedback layer. A complaint makes a preference count for more; it
+  never invents a condition.
+- **The evidence is identical with and without feedback.** A boost is a weight. It must not invent
+  evidence, change a strength, or add a category, and a test compares the two byte for byte while
+  checking the score is higher.
+- **Determinism holds**, including against the order the reasons were ticked in.
+
+The full account is in [`rematching.md`](rematching.md), which is the document for this phase.
+
+## 15. Where this goes next
 
 | Question a reviewer will ask                            | Answered today by                                                          |
 | ------------------------------------------------------- | -------------------------------------------------------------------------- |

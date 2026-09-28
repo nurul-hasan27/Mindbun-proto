@@ -1,9 +1,10 @@
 import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { expectSoundHeadingStructure } from '../test/headingStructure';
 import { renderRoute } from '../test/renderRoute';
 import { paths, therapistPath } from '../routes/paths';
-import { saveReceipt } from '../lib/intake/session';
+import { loadMatch, saveReceipt } from '../lib/intake/session';
 import type { MatchRecommendation, NoCandidateOutcome } from '../lib/api/types';
 
 const INTAKE_ID = '0199a1c2-3d4e-5f60-8712-93a4b5c6d7ea';
@@ -12,6 +13,13 @@ const THERAPIST_ID = '0199a1c2-3d4e-5f60-8712-93a4b5c6d7ed';
 const RECOMMENDATION: MatchRecommendation = {
   matchId: '0199a1c2-3d4e-5f60-8712-93a4b5c6d7ec',
   decidedAt: '2026-09-30T09:00:00.000Z',
+  // A first match: one pass, nobody to have come away from, nothing adjusted and
+  // nothing changed. Present as empty values rather than missing, so a test that
+  // forgets one of them fails to compile instead of quietly rendering a wrong page.
+  attempt: 1,
+  previousTherapistName: null,
+  whatChanged: [],
+  adjustedFor: [],
   therapist: {
     id: THERAPIST_ID,
     displayName: 'Ananya Mehra',
@@ -338,7 +346,21 @@ describe('the next step, which is not built yet', () => {
 
     // Focusable and announced, rather than `disabled` and invisible to a keyboard.
     expect(button).toHaveAttribute('aria-disabled', 'true');
-    expect(document.getElementById('rematch-hint')).toHaveTextContent(/has not been built yet/i);
+    expect(document.getElementById('confirm-hint')).toHaveTextContent(/has not been built yet/i);
+  });
+
+  it('offers "I\u2019d like another option", which *is* built, without pretending it is not', async () => {
+    stubMatch();
+    withReceipt();
+    renderRoute(paths.recommendation);
+
+    // This one works, so it must carry none of the unavailable affordances. A control
+    // that acts and then says it cannot is worse than either honest version, and
+    // `aria-describedby` is where a screen reader would hear the contradiction.
+    const real = await screen.findByRole('button', { name: /like another option/i });
+
+    expect(real).not.toHaveAttribute('aria-disabled', 'true');
+    expect(real).not.toHaveAttribute('aria-describedby');
   });
 
   it('offers a way back to the answers, because changing your mind is allowed', async () => {
@@ -437,10 +459,14 @@ describe('when nothing qualified', () => {
     withReceipt();
     renderRoute(paths.recommendation);
 
-    const button = await screen.findByRole('button', { name: /loosen one thing and look again/i });
+    // Loosening a requirement and searching again is real work on the matching side, so
+    // the control is present, reachable, and says plainly that it is not there yet.
+    const button = await screen.findByRole('button', {
+      name: /loosen one thing and look again/i,
+    });
 
     expect(button).toHaveAttribute('aria-disabled', 'true');
-    expect(document.getElementById('rematch-hint')).toHaveTextContent(/has not been built yet/i);
+    expect(document.getElementById('revisit-hint')).toHaveTextContent(/has not been built yet/i);
   });
 });
 
@@ -524,5 +550,293 @@ describe('starting over', () => {
     });
 
     expect(sessionStorage.getItem('wtm.intake.receipt.v1')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A rematch.
+//
+// The first match's page is the same page with two extra pieces, and the tests below
+// are about those two pieces and about the one thing that must not change: the page
+// still shows exactly one person, and still says nothing about how the choice was made.
+// ---------------------------------------------------------------------------
+
+const REMATCH: MatchRecommendation = {
+  ...RECOMMENDATION,
+  matchId: '0199a1c2-3d4e-5f60-8712-93a4b5c6d7eb',
+  attempt: 2,
+  previousTherapistName: 'Tara Joshi',
+  adjustedFor: ['communication-mismatch'],
+  therapist: {
+    ...RECOMMENDATION.therapist,
+    id: '0199a1c2-3d4e-5f60-8712-93a4b5c6d7f0',
+    displayName: 'Aditi Raghunathan',
+    communicationStyles: [{ key: 'exploratory', name: 'Exploratory' }],
+  },
+  whatChanged: [
+    {
+      category: 'COMMUNICATION_STYLE',
+      detail: 'Communication style',
+      sentence:
+        'You told us the way they talked was not right, and this therapist works more in the Exploratory style you were after.',
+    },
+    {
+      category: 'AVAILABILITY',
+      detail: 'Tuesday 18:00–20:00',
+      sentence:
+        'The last one had no workable time with you. This therapist does — Tuesday, 18:00 to 20:00 your time.',
+    },
+  ],
+};
+
+describe('a second recommendation', () => {
+  it('says it is a second look, and why there is one', async () => {
+    stubMatch({ body: REMATCH });
+    withReceipt();
+    renderRoute(paths.recommendation);
+
+    await screen.findByRole('heading', { level: 1 });
+
+    expect(screen.getByText('Based on your feedback')).toBeInTheDocument();
+    expect(screen.getByText(/we took your feedback into account/i)).toBeInTheDocument();
+  });
+
+  it('says someone else, rather than claiming a better one', async () => {
+    stubMatch({ body: REMATCH });
+    withReceipt();
+    renderRoute(paths.recommendation);
+
+    await screen.findByRole('heading', { level: 1 });
+
+    const heading = screen.getByRole('heading', { level: 1 });
+
+    expect(heading).toHaveTextContent(/someone else you might connect with/i);
+    // "A better match" and "a more suitable therapist" are both claims about the person
+    // who was declined, which is exactly what this product does not do.
+    expect(heading).not.toHaveTextContent(/better|more suitable|improved|upgrade/i);
+  });
+
+  it('names who this is different from, and nobody else', async () => {
+    stubMatch({ body: REMATCH });
+    withReceipt();
+    renderRoute(paths.recommendation);
+
+    await screen.findByRole('heading', { level: 1 });
+
+    expect(screen.getByText(/someone other than Tara Joshi/i)).toBeInTheDocument();
+    // One person to move away from, and one to move to. A third would be a shortlist.
+    expect(document.body.textContent?.match(/Tara Joshi/g)).toHaveLength(1);
+  });
+
+  it('still shows the reasons, in the same words as a first match', async () => {
+    stubMatch({ body: REMATCH });
+    withReceipt();
+    renderRoute(paths.recommendation);
+
+    await screen.findByRole('heading', { level: 1 });
+
+    expect(
+      screen.getByRole('heading', { name: /why we thought you might connect/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('They speak Hindi, one of the languages you chose.'),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('what changed this time', () => {
+  it('shows the differences the server proved', async () => {
+    stubMatch({ body: REMATCH });
+    withReceipt();
+    renderRoute(paths.recommendation);
+
+    await screen.findByRole('heading', { level: 1 });
+
+    const section = screen.getByRole('region', { name: /what changed this time/i });
+
+    expect(
+      within(section).getByText(/works more in the Exploratory style you were after/i),
+    ).toBeInTheDocument();
+    expect(within(section).getByText(/had no workable time with you/i)).toBeInTheDocument();
+  });
+
+  it('labels each difference, so a reader knows what it is about', async () => {
+    stubMatch({ body: REMATCH });
+    withReceipt();
+    renderRoute(paths.recommendation);
+
+    await screen.findByRole('heading', { level: 1 });
+
+    const section = screen.getByRole('region', { name: /what changed this time/i });
+
+    expect(within(section).getByText('Communication style')).toBeInTheDocument();
+    expect(within(section).getByText('Tuesday 18:00–20:00')).toBeInTheDocument();
+  });
+
+  it('is absent when nothing demonstrably changed, rather than padded', async () => {
+    // The server sends nothing it cannot prove changed. A section that appeared with a
+    // list of near-identical attributes would be padding, and padding in a "what
+    // changed" panel is the one place a reader is most likely to believe it.
+    stubMatch({ body: { ...REMATCH, whatChanged: [] } });
+    withReceipt();
+    renderRoute(paths.recommendation);
+
+    await screen.findByRole('heading', { level: 1 });
+
+    expect(
+      screen.queryByRole('region', { name: /what changed this time/i }),
+    ).not.toBeInTheDocument();
+    // And no heading with nothing under it.
+    expect(screen.queryByText(/what changed/i)).not.toBeInTheDocument();
+  });
+
+  it('is absent on a first match, which has nothing to compare against', async () => {
+    stubMatch();
+    withReceipt();
+    renderRoute(paths.recommendation);
+
+    await screen.findByRole('heading', { level: 1 });
+
+    expect(
+      screen.queryByRole('region', { name: /what changed this time/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('is a quiet section rather than a panel, a card or an alert', async () => {
+    stubMatch({ body: REMATCH });
+    withReceipt();
+    renderRoute(paths.recommendation);
+
+    await screen.findByRole('heading', { level: 1 });
+
+    const section = screen.getByRole('region', { name: /what changed this time/i });
+
+    // A hairline above, the same treatment as every other section. A boxed or tinted
+    // panel would be claiming something louder than three sentences can support.
+    expect(section).toHaveClass('border-t');
+    expect(section).toHaveClass('border-line');
+    expect(section.className).not.toMatch(/\b(shadow|rounded|bg-|alert|highlight|badge)\b/);
+  });
+
+  it('shows no score, weight, rank or percentage anywhere in it', async () => {
+    stubMatch({ body: REMATCH });
+    withReceipt();
+    renderRoute(paths.recommendation);
+
+    await screen.findByRole('heading', { level: 1 });
+
+    const section = screen.getByRole('region', { name: /what changed this time/i });
+    const text = (section.textContent ?? '').toLowerCase();
+
+    expect(text).not.toMatch(/\d+\s*%/);
+    expect(text).not.toMatch(
+      /\b(score|scored|rank|ranking|weight|points?|best|top|percent|higher|greater)\b/,
+    );
+  });
+
+  it('does not claim to have learned anything', async () => {
+    stubMatch({ body: REMATCH });
+    withReceipt();
+    renderRoute(paths.recommendation);
+
+    await screen.findByRole('heading', { level: 1 });
+
+    // What happened is that a weight moved and a person was removed. "Took your
+    // feedback into account" is true of that; "learned" and "adapted to you" are not.
+    const page = (document.body.textContent ?? '').toLowerCase();
+
+    expect(page).not.toMatch(
+      /\b(we (now )?(know|learned|understand) you|learned from|adapted to|getting to know you|smarter|better at matching|your profile|insight into you)\b/,
+    );
+  });
+
+  it('keeps a sound heading structure with the section present', async () => {
+    stubMatch({ body: REMATCH });
+    withReceipt();
+    renderRoute(paths.recommendation);
+
+    await screen.findByRole('heading', { level: 1 });
+    expectSoundHeadingStructure();
+  });
+});
+
+describe('from a rematch, to another one', () => {
+  it('takes you to the feedback page for the person now showing', async () => {
+    const user = userEvent.setup();
+    stubMatch({ body: REMATCH });
+    withReceipt();
+    const { router } = renderRoute(paths.recommendation);
+
+    await screen.findByRole('heading', { level: 1 });
+    await user.click(screen.getByRole('button', { name: /like another option/i }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(paths.feedback));
+
+    // The match id has to be the *new* one, or the next round of feedback would be
+    // filed about the person we already turned down.
+    const record = loadMatch();
+
+    expect(record?.matchId).toBe(REMATCH.matchId);
+    expect(record?.attempt).toBe(2);
+    expect(record?.previousTherapistName).toBe('Tara Joshi');
+  });
+
+  it('is reachable by keyboard, with no pointer needed', async () => {
+    const user = userEvent.setup();
+    stubMatch({ body: REMATCH });
+    withReceipt();
+    const { router } = renderRoute(paths.recommendation);
+
+    await screen.findByRole('heading', { level: 1 });
+
+    const control = screen.getByRole('button', { name: /like another option/i });
+
+    control.focus();
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(paths.feedback));
+  });
+});
+
+describe('what a rematch must never show', () => {
+  it('shows exactly one therapist', async () => {
+    stubMatch({ body: REMATCH });
+    withReceipt();
+    renderRoute(paths.recommendation);
+
+    await screen.findByRole('heading', { level: 1 });
+
+    // Two names is right — the one found, and the one being moved away from — and the
+    // second is in prose rather than as a profile.
+    expect(document.body.textContent?.match(/Tara Joshi/g)).toHaveLength(1);
+    expect(screen.getAllByRole('heading', { level: 2, name: 'Aditi Raghunathan' })).toHaveLength(1);
+    expect(screen.queryByRole('heading', { level: 2, name: 'Tara Joshi' })).not.toBeInTheDocument();
+  });
+
+  it('shows no candidate list, no ranking and no count of people considered', async () => {
+    stubMatch({ body: REMATCH });
+    withReceipt();
+    renderRoute(paths.recommendation);
+
+    await screen.findByRole('heading', { level: 1 });
+
+    const page = (document.body.textContent ?? '').toLowerCase();
+
+    expect(page).not.toMatch(
+      /\b(other (therapists|candidates|options)|also considered|shortlist|ranked|candidates? (?:list|rank))\b/,
+    );
+    expect(page).not.toMatch(/\b\d+ (?:therapists|candidates|people) (?:were )?considered\b/);
+  });
+
+  it('leaks no identifier of the therapist that was declined', async () => {
+    stubMatch({ body: REMATCH });
+    withReceipt();
+    renderRoute(paths.recommendation);
+
+    await screen.findByRole('heading', { level: 1 });
+
+    // The name is theirs to have seen. The id is a database detail, and the profile
+    // route for them is not linked from here — only the new person's is.
+    expect(document.body.textContent).not.toContain('0199a1c2-3d4e-5f60-8712-93a4b5c6d7ea');
   });
 });

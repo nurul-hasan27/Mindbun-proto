@@ -11,6 +11,13 @@ const INTAKE_ID = '0199a1c2-3d4e-5f60-8712-93a4b5c6d7ea';
 const RECOMMENDATION: MatchRecommendation = {
   matchId: '0199a1c2-3d4e-5f60-8712-93a4b5c6d7ec',
   decidedAt: '2026-09-30T09:00:00.000Z',
+  // A first match: one pass, nobody to have come away from, nothing adjusted and
+  // nothing changed. Present as empty values rather than missing, so a test that
+  // forgets one of them fails to compile instead of quietly rendering a wrong page.
+  attempt: 1,
+  previousTherapistName: null,
+  whatChanged: [],
+  adjustedFor: [],
   therapist: {
     id: '0199a1c2-3d4e-5f60-8712-93a4b5c6d7ed',
     displayName: 'Ananya Mehra',

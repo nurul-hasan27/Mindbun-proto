@@ -4,6 +4,9 @@ import { v1Routes } from './api/v1/routes/index.js';
 import type { LogLevel } from './config/env.js';
 import type { IntakeRepository } from './data/intake/intakeRepository.js';
 import { createPrismaIntakeRepository } from './data/intake/prismaIntakeRepository.js';
+import type { FeedbackRepository } from './data/matching/feedbackRepository.js';
+import { createUnavailableFeedbackRepository } from './data/matching/feedbackRepository.js';
+import { createPrismaFeedbackRepository } from './data/matching/prismaFeedbackRepository.js';
 import type { MatchRepository } from './data/matching/matchRepository.js';
 import { createPrismaMatchRepository } from './data/matching/prismaMatchRepository.js';
 import { createPrismaTherapistRepository } from './data/therapists/prismaTherapistRepository.js';
@@ -32,6 +35,7 @@ export interface BuildAppOptions {
   readonly therapists?: TherapistRepository;
   readonly intakes?: IntakeRepository;
   readonly matches?: MatchRepository;
+  readonly feedback?: FeedbackRepository;
 }
 
 /**
@@ -47,6 +51,7 @@ export function buildApp({
   therapists,
   intakes,
   matches,
+  feedback,
 }: BuildAppOptions = {}): FastifyInstance {
   const app = Fastify({
     logger,
@@ -106,6 +111,7 @@ export function buildApp({
     therapists: therapists ?? unavailableTherapistRepository(),
     intakes: intakes ?? unavailableIntakeRepository(),
     matches: matches ?? unavailableMatchRepository(),
+    feedback: feedback ?? createUnavailableFeedbackRepository(),
   });
 
   return app;
@@ -124,6 +130,7 @@ export function buildAppWithStore({
     therapists: createPrismaTherapistRepository(prisma),
     intakes: createPrismaIntakeRepository(prisma),
     matches: createPrismaMatchRepository(prisma),
+    feedback: createPrismaFeedbackRepository(prisma),
   });
 }
 
@@ -162,6 +169,9 @@ function unavailableMatchRepository(): MatchRepository {
     listCandidates: unavailable,
     saveRun: unavailable,
     findRun: unavailable,
+    findLatestRun: unavailable,
+    findPreviousRun: unavailable,
+    resolveNextAttempt: unavailable,
     readVocabularyNames: unavailable,
   };
 }

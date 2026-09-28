@@ -195,6 +195,26 @@
     outline-offset: 3px;
   }
 
+  /*
+   * Focus for a control whose own box is invisible.
+   *
+   * A visually hidden input — `sr-only` — is one pixel wide, so the browser draws its
+   * focus ring on a one-pixel box and nobody sees it. The visible focus has to be
+   * carried by whatever wraps it, and a one-pixel border colour change is not enough to
+   * be sure of: the unfocused state already has a border, so the whole difference is a
+   * shade of a line. This gives the wrapper the same ring the rest of the product uses,
+   * so keyboard focus is as visible here as it is on a button.
+   *
+   * Kept as one named utility rather than repeated per component, because a focus
+   * treatment that is written out separately in four places is a focus treatment that
+   * will be thinner in one of them.
+   */
+  .focus-within-ring:focus-within {
+    outline: 2px solid var(--color-clay-700);
+    outline-offset: 2px;
+    border-radius: var(--radius-control);
+  }
+
   /* Inputs and controls inherit the product's voice rather than the OS's. */
   input,
   textarea,

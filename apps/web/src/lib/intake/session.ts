@@ -19,6 +19,7 @@ const DRAFT_KEY = 'wtm.intake.draft.v1';
 const SESSION_KEY = 'wtm.intake.session.v1';
 const SUBMISSION_KEY = 'wtm.intake.submission.v1';
 const RECEIPT_KEY = 'wtm.intake.receipt.v1';
+const MATCH_KEY = 'wtm.match.current.v1';
 
 /**
  * Storage can refuse: a private window, a full quota, a browser policy. Nothing
@@ -160,6 +161,80 @@ export function loadReceipt(): IntakeReceipt | null {
 
 export function clearReceipt(): void {
   remove(RECEIPT_KEY);
+  remove(MATCH_KEY);
+}
+
+/**
+ * The recommendation currently being shown, and the match id behind it.
+ *
+ * The match id is the only way to file feedback about it or to look again, and it is
+ * held here so a refresh mid-conversation returns to the same place instead of an empty
+ * page. The therapist's *name* is stored too, so the feedback page can say who is being
+ * talked about without a request.
+ *
+ * Not personal data, and not an answer: two identifiers and a name the person has
+ * already been shown. `clearReceipt` — which "start over" calls — removes it, so a
+ * prototype with no account still leaves nothing behind.
+ */
+export interface MatchRecord {
+  readonly matchId: string;
+  readonly therapistName: string;
+  /** Which pass this is. 1 for a first match. */
+  readonly attempt: number;
+  /** The match this one replaced, so the history is walkable in one tab. */
+  readonly previousMatchId: string | null;
+  /** The match this one replaced, by name, for the "someone else" line. */
+  readonly previousTherapistName: string | null;
+}
+
+export function saveMatch(record: MatchRecord): void {
+  write(MATCH_KEY, JSON.stringify(record));
+}
+
+export function loadMatch(): MatchRecord | null {
+  const stored = read(MATCH_KEY);
+
+  if (stored === null) {
+    return null;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(stored);
+
+    if (typeof parsed !== 'object' || parsed === null) {
+      return null;
+    }
+
+    const { matchId, therapistName, attempt, previousMatchId, previousTherapistName } =
+      parsed as Partial<MatchRecord>;
+
+    if (
+      typeof matchId !== 'string' ||
+      typeof therapistName !== 'string' ||
+      typeof attempt !== 'number'
+    ) {
+      return null;
+    }
+
+    if (!isUuid(matchId)) {
+      return null;
+    }
+
+    return {
+      matchId,
+      therapistName,
+      attempt,
+      previousMatchId: typeof previousMatchId === 'string' ? previousMatchId : null,
+      previousTherapistName:
+        typeof previousTherapistName === 'string' ? previousTherapistName : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function clearMatch(): void {
+  remove(MATCH_KEY);
 }
 
 export function hasStoredDraft(): boolean {

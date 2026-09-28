@@ -1,6 +1,6 @@
 import type { AvailabilityWindowInput } from '../intake/intakeTypes.js';
 import type { ZonedWindow } from './availability.js';
-import type { ClientSignals, RequirementRule } from './matchingTypes.js';
+import type { ClientSignals, MatchCategory, RequirementRule } from './matchingTypes.js';
 
 /**
  * Stage 2 of the pipeline: reduce what was stored to the keys the engine compares.
@@ -111,6 +111,37 @@ export function deriveRequirements(stored: StoredIntake): readonly RequirementRu
   ];
 
   return permissive.filter((rule) => rule.keys.length > 0);
+}
+
+/**
+ * What the client said they wanted, per category, straight from their intake.
+ *
+ * Its own function rather than a helper on the evidence, because reading the preference
+ * off a *match* only works when that match happened to share one — and the case where
+ * it did not is the case that matters most. Someone who asked for an exploratory
+ * therapist and was given a direct one has no communication-style evidence on that
+ * match at all, so the preference would read as "they wanted nothing" and the next
+ * person to actually offer exploratory could not be described as closer to it.
+ *
+ * The intake is where a stated preference lives. That is the whole reason it is stored.
+ */
+export function statedPreferences(
+  stored: StoredIntake,
+): Readonly<Record<MatchCategory, readonly string[]>> {
+  return {
+    AREA_OF_WORK: [...stored.areasOfWork],
+    // Suppressed rather than empty when the person said they are not sure yet, for the
+    // same reason `ClientSignals` suppresses it: nobody asked for a particular style, so
+    // no style can be said to have improved.
+    COMMUNICATION_STYLE: stored.openToGuidance ? [] : [...stored.communicationStyles],
+    THERAPEUTIC_APPROACH: [...stored.approaches],
+    CONTEXTUAL_EXPERIENCE: [...stored.contextualExperiences],
+    LANGUAGE: [...stored.languages],
+    SESSION_FORMAT: [...stored.sessionFormats],
+    // Availability is a set of times rather than a list of terms, and it is compared as
+    // an overlap rather than as a share, so it has no stated preference to carry here.
+    AVAILABILITY: [],
+  };
 }
 
 /** Stage 2: what was stored becomes the signals the engine compares. */

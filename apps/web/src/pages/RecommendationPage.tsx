@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Button, ButtonLink } from '../components/Button';
 import { Container } from '../components/Container';
@@ -7,41 +7,38 @@ import { Eyebrow } from '../components/Eyebrow';
 import { Monogram } from '../components/Monogram';
 import { ProfileSection } from '../components/ProfileSection';
 import { TextLink } from '../components/TextLink';
-import { WhyThisMatch } from '../components/WhyThisMatch';
+import { FeedbackLine, PreviousLine, WhatChanged, WhyThisMatch } from '../components/WhatChanged';
 import { useApiResource } from '../lib/useApiResource';
 import { usePageMeta } from '../lib/usePageMeta';
-import { clearReceipt, loadReceipt } from '../lib/intake/session';
-import { isRecommendation, requestMatch, type MatchRecommendation } from '../lib/api';
+import { clearReceipt, loadReceipt, saveMatch } from '../lib/intake/session';
+import { isRecommendation, requestMatch } from '../lib/api';
+import type { MatchRecommendation } from '../lib/api/types';
 import { joinNames } from '../lib/format';
 import { paths, therapistPath } from '../routes/paths';
 
 /**
  * The recommendation.
  *
- * This page is the argument the whole prototype has been making, so it has one job:
- * introduce one person, and say plainly why that person rather than anyone else.
+ * For a first match this is Phase 5's page with one addition: a way to say "this isn't
+ * right", which is the whole point of this phase. For a rematch it is the same page with
+ * two extra pieces — a line saying the second search was because of what was said, and a
+ * short section on what is demonstrably different about this person.
  *
  * ## What is not here, and why
  *
- * No score, no percentage, no stars, no "best match", no "your number one", no list
- * of anyone else, and no way yet to ask for a different person. A page showing three
- * candidates with numbers beside them would be a marketplace with softer typography —
- * the ranking *is* the product, whatever the font. The brief asked for one person
- * and the reasons, and the only honest way to honour that is to show one person.
+ * No score, no percentage, no stars, no "best match", no "your number one", no list of
+ * anyone else, and no claim to have learnt anything. A page showing three candidates
+ * with numbers beside them would be a marketplace with softer typography — the ranking
+ * *is* the product, whatever the font. The internal ordering figure decides which single
+ * person this is, and then the page stops.
  *
- * "This feels right" is present, focusable, and says it is not available yet.
- * Rematching is the next phase; a control that quietly did nothing would be a small
- * lie in the exact place the product is asking for trust.
- *
- * ## Shape
- *
- * A continuation of the intake rather than a result screen. The reasons come before
- * the biography, because someone who has just answered seven questions wants to
- * know *why*, not who.
+ * "This feels right" and "I'd like another option" are both honest about where they lead:
+ * the first is Phase 5's unfinished confirmation, and the second goes to the feedback
+ * page, which is built.
  */
 export function RecommendationPage() {
-  // Read once: a receipt is an identifier and a timestamp, so a refresh returns to
-  // the same recommendation rather than to an empty page.
+  // Read once: a receipt is an identifier and a timestamp, so a refresh returns to the
+  // same recommendation rather than to an empty page.
   const [receipt] = useState(loadReceipt);
 
   const match = useApiResource<MatchRecommendation | null>(
@@ -71,10 +68,10 @@ export function RecommendationPage() {
         <Eyebrow>Finding someone</Eyebrow>
         <h1 className="font-display text-title mt-6 text-balance">One moment.</h1>
         {/*
-          What the service is doing, plainly. No "AI is thinking", no animated
-          scan, and no manufactured delay to feel thorough: this is fifty
-          comparisons and finishes in milliseconds, and pretending otherwise would
-          be theatre rather than reassurance.
+          What the service is doing, plainly. No "AI is thinking", no animated scan, and
+          no manufactured delay to feel thorough: this is fifty comparisons and finishes
+          in milliseconds, and pretending otherwise would be theatre rather than
+          reassurance.
         */}
         <p className="loading-breathe bg-clay-300 mt-10 block h-px w-full" aria-hidden="true" />
         <p aria-live="polite" className="text-small text-ink-muted mt-5 text-pretty">
@@ -106,34 +103,50 @@ export function RecommendationPage() {
   return <Recommendation recommendation={match.state.data} />;
 }
 
-function Frame({ children }: { readonly children: React.ReactNode }) {
-  return (
-    <Container className="pt-14 pb-6 sm:pt-20">
-      <div className="max-w-2xl">{children}</div>
-    </Container>
-  );
-}
-
 function Recommendation({ recommendation }: { readonly recommendation: MatchRecommendation }) {
   const navigate = useNavigate();
   const { therapist, whyThisMatch } = recommendation;
 
+  // Everything the page says about *which* pass this is comes from the response, not
+  // from the browser's own record. The server is the only place that knows the attempt
+  // number and the person being replaced; reading them from local storage instead would
+  // mean a refresh could put "Based on your feedback" on a first match, or quietly lose
+  // it on a rematch.
+  const isRematch = recommendation.attempt > 1;
+  const previous = isRematch ? recommendation.previousTherapistName : null;
+
+  // The match id has to be remembered before the feedback page can act on it, so this
+  // runs when a recommendation appears. The record holds only what the next page needs —
+  // an id, a name, a pass number — and "start over" clears it.
+  useEffect(() => {
+    saveMatch({
+      matchId: recommendation.matchId,
+      therapistName: therapist.displayName,
+      attempt: recommendation.attempt,
+      previousMatchId: null,
+      previousTherapistName: recommendation.previousTherapistName,
+    });
+  }, [
+    recommendation.attempt,
+    recommendation.matchId,
+    recommendation.previousTherapistName,
+    therapist.displayName,
+  ]);
+
   return (
     <Frame>
-      {/*
-        The transition from the intake, in one line. The person has just answered
-        seven questions about what matters to them; the first thing this page says
-        is that those answers are what produced the person below.
-      */}
-      <Eyebrow>You shared what matters</Eyebrow>
+      {isRematch ? <FeedbackLine /> : <Eyebrow>You shared what matters</Eyebrow>}
 
       <h1 className="font-display text-title mt-6 text-balance">
-        Here is someone we think you might connect with.
+        {isRematch
+          ? 'We found someone else you might connect with.'
+          : 'Here is someone we think you might connect with.'}
       </h1>
 
       <p className="text-lead text-ink-muted max-w-measure mt-6 text-pretty">
-        We looked through everyone here against what you told us, and this is the one whose own
-        words about their work overlap the most.
+        {isRematch
+          ? 'We took your feedback into account, and this is who came out of it.'
+          : 'We looked through everyone here against what you told us, and this is the one whose own words about their work overlap the most.'}
       </p>
 
       <div className="border-line mt-14 border-t pt-8">
@@ -150,10 +163,14 @@ function Recommendation({ recommendation }: { readonly recommendation: MatchReco
         <p className="text-small text-ink-faint mt-5">
           {therapist.location} · {therapist.yearsOfExperience} years in practice
         </p>
+
+        {previous !== null && <PreviousLine name={previous} />}
       </div>
 
       <div className="mt-14 flex flex-col gap-14">
         <WhyThisMatch reasons={whyThisMatch} />
+
+        <WhatChanged notes={recommendation.whatChanged} />
 
         <ProfileSection label="Works with">
           <ul className="flex flex-col gap-3">
@@ -190,21 +207,30 @@ function Recommendation({ recommendation }: { readonly recommendation: MatchReco
         </ButtonLink>
 
         {/*
-          Present, focusable, and honest. `unavailable` rather than `disabled` so it
-          is still announced and still reachable — a control that silently cannot be
-          used is worse than one that says why.
+          Present, focusable, and honest. `unavailable` rather than `disabled` so it is
+          still announced and still reachable — a control that silently cannot be used
+          is worse than one that says why. Recording that a match felt right is genuinely
+          the next part of this prototype, and it is not built.
         */}
-        <Button unavailable unavailableHint="rematch-hint" variant="quiet">
+        <Button unavailable unavailableHint="confirm-hint" variant="quiet">
           This feels right
         </Button>
-        <p id="rematch-hint" className="text-small text-ink-faint max-w-sm text-pretty">
-          Being able to ask for someone else is the next part of this prototype, and it has not been
-          built yet.
+        <p id="confirm-hint" className="text-small text-ink-faint max-w-sm text-pretty">
+          Being able to record that a match felt right is the next part of this prototype, and it
+          has not been built yet.
         </p>
 
-        <p>
-          <TextLink to={paths.intake}>Back to your answers</TextLink>
-        </p>
+        {/*
+          The action this phase is about. "I'd like another option" rather than
+          "reject", "dislike" or "bad match": a person who has decided this is not for
+          them has not assessed the person on the other side of it, and a word that says
+          they have is both untrue and a small cruelty.
+        */}
+        <Button variant="quiet" onClick={() => void navigate(paths.feedback)}>
+          I&rsquo;d like another option
+        </Button>
+
+        <TextLink to={paths.intake}>Back to your answers</TextLink>
       </div>
 
       <p className="text-small text-ink-faint mt-14 max-w-md text-pretty">
@@ -214,9 +240,9 @@ function Recommendation({ recommendation }: { readonly recommendation: MatchReco
 
       <p className="mt-6">
         {/*
-          The receipt is the only thing this tab kept after the answers were sent,
-          and this is where it goes. A prototype with no account should leave
-          nothing behind, and "start over" has to mean that.
+          The receipt and the match record are the only things this tab kept after the
+          answers were sent, and this is where they go. A prototype with no account
+          should leave nothing behind, and "start over" has to mean that.
         */}
         <button
           type="button"
@@ -239,7 +265,7 @@ function NobodyQualified() {
       <Eyebrow>No one qualified</Eyebrow>
 
       <h1 className="font-display text-title mt-6 text-balance">
-        We couldn’t find someone who fits all of the things you marked as important.
+        We couldn&rsquo;t find someone who fits all of the things you marked as important.
       </h1>
 
       <p className="text-lead text-ink-muted max-w-measure mt-6 text-pretty">
@@ -248,15 +274,15 @@ function NobodyQualified() {
       </p>
 
       {/*
-        The honest next step, and the one this phase cannot take. Loosening a
-        requirement and looking again is real work on the matching side, so the
-        control is present, focusable, and says so.
+        The honest next step, and the one this phase cannot take. Loosening a requirement
+        and looking again is real work on the matching side, so the control is present,
+        focusable, and says so.
       */}
       <div className="mt-10 flex flex-col items-start gap-6">
-        <Button unavailable unavailableHint="rematch-hint" variant="quiet">
+        <Button unavailable unavailableHint="revisit-hint" variant="quiet">
           Loosen one thing and look again
         </Button>
-        <p id="rematch-hint" className="text-small text-ink-faint max-w-sm text-pretty">
+        <p id="revisit-hint" className="text-small text-ink-faint max-w-sm text-pretty">
           Adjusting your requirements and searching again is the next part of this prototype, and it
           has not been built yet.
         </p>
@@ -272,7 +298,7 @@ function NothingToExplain() {
       <Eyebrow>Nothing to look up</Eyebrow>
 
       <h1 className="font-display text-title mt-6 text-balance">
-        There’s nothing here to explain yet.
+        There&rsquo;s nothing here to explain yet.
       </h1>
 
       <p className="text-lead text-ink-muted max-w-measure mt-6 text-pretty">
@@ -290,6 +316,14 @@ function NothingToExplain() {
 
 function firstNameOnly(name: string): string {
   return name.split(' ')[0] ?? name;
+}
+
+function Frame({ children }: { readonly children: React.ReactNode }) {
+  return (
+    <Container className="pt-14 pb-6 sm:pt-20">
+      <div className="max-w-2xl">{children}</div>
+    </Container>
+  );
 }
 
 async function findRecommendation(

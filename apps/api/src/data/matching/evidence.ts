@@ -1,4 +1,5 @@
 import { findAvailabilityOverlaps, type AvailabilityOverlap } from './availability.js';
+import type { FeedbackSignals } from './feedbackSignals.js';
 import type {
   CandidateEvaluation,
   CandidateTherapist,
@@ -10,11 +11,12 @@ import type {
 } from './matchingTypes.js';
 import {
   AVAILABILITY_DAY_CAP,
-  AVAILABILITY_PER_DAY,
   CATEGORY_EXPLANATION,
   CATEGORY_MAX_SCORE,
   REQUIREMENT_BONUS,
   categoryScore,
+  maxAvailabilityPerDay,
+  maxCategoryScore,
   strengthFor,
 } from './weights.js';
 
@@ -118,6 +120,7 @@ export function buildEvidence(
   signals: ClientSignals,
   candidate: CandidateTherapist,
   requirements: readonly ResolvedRequirement[],
+  feedback: FeedbackSignals = { reasonKeys: [], increments: {}, touchedCategories: [] },
 ): {
   readonly evidence: MatchEvidenceInput[];
   readonly score: number;
@@ -151,7 +154,7 @@ export function buildEvidence(
     evidence.push(item('COMMUNICATION_STYLE', key, key, requiredKeys));
   }
   score += categoryScore(
-    CATEGORY_MAX_SCORE.COMMUNICATION_STYLE,
+    maxCategoryScore('COMMUNICATION_STYLE', feedback.increments),
     count(signals.communicationStyles, candidate.communicationStyles),
     signals.communicationStyles.length,
   );
@@ -160,7 +163,7 @@ export function buildEvidence(
     evidence.push(item('THERAPEUTIC_APPROACH', key, key, requiredKeys));
   }
   score += categoryScore(
-    CATEGORY_MAX_SCORE.THERAPEUTIC_APPROACH,
+    maxCategoryScore('THERAPEUTIC_APPROACH', feedback.increments),
     count(signals.approaches, candidate.approaches),
     signals.approaches.length,
   );
@@ -169,7 +172,7 @@ export function buildEvidence(
     evidence.push(item('CONTEXTUAL_EXPERIENCE', key, key, requiredKeys));
   }
   score += categoryScore(
-    CATEGORY_MAX_SCORE.CONTEXTUAL_EXPERIENCE,
+    maxCategoryScore('CONTEXTUAL_EXPERIENCE', feedback.increments),
     count(signals.contextualExperiences, candidate.contextualExperience),
     signals.contextualExperiences.length,
   );
@@ -188,7 +191,7 @@ export function buildEvidence(
     });
   }
   score += categoryScore(
-    CATEGORY_MAX_SCORE.LANGUAGE,
+    maxCategoryScore('LANGUAGE', feedback.increments),
     count(signals.languages, candidate.languages),
     signals.languages.length,
   );
@@ -197,7 +200,7 @@ export function buildEvidence(
     evidence.push(item('SESSION_FORMAT', key, key, requiredKeys));
   }
   score += categoryScore(
-    CATEGORY_MAX_SCORE.SESSION_FORMAT,
+    maxCategoryScore('SESSION_FORMAT', feedback.increments),
     count(signals.sessionFormats, candidate.sessionFormats),
     signals.sessionFormats.length,
   );
@@ -220,9 +223,11 @@ export function buildEvidence(
       evidence.push(availabilityItem(overlap));
     }
 
-    // Capped, so a therapist free every evening does not outrank a closer fit on
-    // hours nobody books.
-    score += Math.min(overlaps.length, AVAILABILITY_DAY_CAP) * AVAILABILITY_PER_DAY;
+    // Capped twice over: by the number of shared days, so a therapist free every
+    // evening does not outrank a closer fit on hours nobody books, and by the boost
+    // ceiling, so feedback about timing cannot buy unbounded priority.
+    score +=
+      Math.min(overlaps.length, AVAILABILITY_DAY_CAP) * maxAvailabilityPerDay(feedback.increments);
   }
 
   return { evidence: orderEvidence(evidence), score, availabilityUncomparable };
@@ -255,7 +260,11 @@ function availabilityItem(overlap: AvailabilityOverlap): MatchEvidenceInput {
     clientKey: `${overlap.client.dayOfWeek} ${overlap.client.startMinute}-${overlap.client.endMinute}`,
     therapistKey: `${overlap.therapist.dayOfWeek} ${overlap.therapist.startMinute}-${overlap.therapist.endMinute}`,
     explanation: 'AVAILABILITY_OVERLAP',
-    weight: AVAILABILITY_PER_DAY,
+    // The base figure, not the boosted one. This column is metadata about the evidence
+    // — what kind of fact it is — and the score it fed is already recomputed with the
+    // boost applied. Storing the boosted number here would mean the record claimed a
+    // weight the base evidence never had.
+    weight: CATEGORY_MAX_SCORE.AVAILABILITY,
     overlap: {
       dayOfWeek: overlap.client.dayOfWeek,
       startMinute: overlap.client.startMinute,
@@ -310,6 +319,7 @@ function count(asked: readonly string[], offered: readonly string[]): number {
 export function evaluateCandidate(
   signals: ClientSignals,
   candidate: CandidateTherapist,
+  feedback?: FeedbackSignals,
 ): {
   readonly evaluation: CandidateEvaluation;
   readonly availabilityUncomparable: boolean;
@@ -320,6 +330,7 @@ export function evaluateCandidate(
     signals,
     candidate,
     requirements,
+    feedback,
   );
 
   return {

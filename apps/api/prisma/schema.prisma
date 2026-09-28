@@ -69,8 +69,9 @@ model Therapist {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  profile TherapistProfile?
-  matches Match[]
+  profile  TherapistProfile?
+  matches  Match[]
+  feedback Feedback[]
 
   @@map("therapists")
 }
@@ -340,50 +341,99 @@ model Intake {
 
   matches             Match[]
   producedPreferences ClientPreference[]
+  feedbacks           Feedback[]
 
   @@index([clientId, createdAt])
   @@map("intakes")
 }
 
-enum MatchSentiment {
-  GOOD
-  MIXED
-  POOR
-}
-
-/// What a person thought of a therapist, in their own words and in ours.
+/// What someone said about one recommendation.
 ///
-/// `reason` is the part that matters for the product: a structured reason is
-/// what lets the next recommendation be different rather than merely different
-/// in appearance.
+/// The most important thing about this model is what it does **not** contain: a
+/// rating, a score, or a judgement of the therapist.
+///
+/// A Phase 2 sketch had a `sentiment` column here, holding `GOOD | MIXED | POOR`. It
+/// was removed, and the reasoning is worth keeping because it is the whole reason this
+/// table is shaped as it is. `POOR` is a verdict on a person, and this product does
+/// not issue verdicts on people — its entire argument is that finding someone to talk
+/// to is not shopping, and a star rating is shopping. Worse, `POOR` is not what the
+/// person said. They said *this did not feel right for me*, which is a fact about their
+/// experience, and a table that cannot distinguish the two will eventually be read as
+/// the latter.
+///
+/// So a row here means exactly: **the client reported that this match did not feel like
+/// a fit, and said so in these terms.** The reason keys carry what was reported. The
+/// match's status carries what they then did about it. Nothing here claims to know
+/// anything about the therapist's skill, their effectiveness, or what they are like to
+/// work with — and nothing downstream infers any of that.
 model Feedback {
-  id          String         @id @default(uuid()) @db.Uuid
-  clientId    String         @db.Uuid
-  therapistId String         @db.Uuid
-  sentiment   MatchSentiment
-  reasonId    String?        @db.Uuid
-  /// Optional free text, in the client's own words.
-  text        String?
-  createdAt   DateTime       @default(now())
+  id          String @id @default(uuid()) @db.Uuid
+  clientId    String @db.Uuid
+  intakeId    String @db.Uuid
+  therapistId String @db.Uuid
 
-  client Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  reason FeedbackReason? @relation(fields: [reasonId], references: [id], onDelete: SetNull)
+  /// The match this is about, so the feedback cannot be detached from the decision it
+  /// responds to and read as a general opinion of a person.
+  matchId String @unique @db.Uuid
+
+  /// Optional free text, in the client's own words.
+  ///
+  /// Stored, never parsed, never logged, and never a matching input — the same
+  /// treatment `Intake.rawText` has, for the same reason. It is here because the
+  /// product is built on someone being allowed to say more than a checkbox allows.
+  text String?
+
+  createdAt DateTime @default(now())
+
+  client    Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  intake    Intake             @relation(fields: [intakeId], references: [id], onDelete: Cascade)
+  therapist Therapist          @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+  match     Match              @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  reasons   FeedbackToReason[]
 
   @@index([clientId, createdAt])
+  @@index([intakeId, createdAt])
   @@index([therapistId])
   @@map("feedback")
 }
 
-/// The reason a match did not work, as a short curated list. Wording matters:
-/// these are shown to clients, so they describe a fit that did not happen
-/// rather than a failing of either person.
+/// The terms someone picked, in their own vocabulary.
+///
+/// A m:n relation, because multiple reasons make real product sense here and a single
+/// one would be a lie: "the timing didn't work and I didn't feel understood" is one
+/// thing a person can mean, and forcing them to choose which half mattered more would
+/// lose the part that mattered to them.
+model FeedbackToReason {
+  feedbackId String @db.Uuid
+  reasonId   String @db.Uuid
+
+  feedback Feedback       @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  reason   FeedbackReason @relation(fields: [reasonId], references: [id], onDelete: Cascade)
+
+  @@id([feedbackId, reasonId])
+  @@index([reasonId])
+  @@map("feedback_to_reasons")
+}
+
+/// The terms someone picked, in their own vocabulary.
+///
+/// A key and its wording, and nothing that says anything about a therapist. The
+/// wording is expected to be rewritten by a copywriter, so every consumer reads `key`
+/// and only the interface reads `name` — a UI label as a key would couple the matching
+/// rules to the interface's typography.
+///
+/// Each `name` is written from the person who answered it, and none is a verdict on
+/// the therapist. The vocabulary no longer carries `location-mismatch`, which Phase 2
+/// had: this phase does no geographic matching, so offering it would collect something
+/// the engine cannot act on and imply that it changed the next search. See
+/// `prisma/data/vocabularies.ts`.
 model FeedbackReason {
   id          String @id @default(uuid()) @db.Uuid
   key         String @unique
   name        String
   description String
 
-  feedback Feedback[]
+  feedbackToReasons FeedbackToReason[]
 
   @@map("feedback_reasons")
 }
@@ -413,14 +463,29 @@ model FeedbackReason {
 //     exposing it would turn a recommendation into a leaderboard.
 // ---------------------------------------------------------------------------
 
-/// What happened to one candidate, and if it was recommended, the single one.
+/// What happened to one candidate.
+///
+/// Four states, and no more. A state that no code path can reach is a state nobody
+/// can reason about, so `SUPERSEDED` is deliberately absent: a previous match that was
+/// offered and turned down is `DECLINED`, not "superseded", and a candidate that was
+/// simply not chosen was `ELIGIBLE` and is still `ELIGIBLE` — it lost an ordering, which
+/// is not a status change. The only transition in the whole system is
+/// `RECOMMENDED → DECLINED`, and it happens exactly once per match, when feedback
+/// arrives.
 enum MatchStatus {
   /// Considered, satisfied every requirement, and is scored.
   ELIGIBLE
-  /// Considered and set aside because a requirement was not met.
+  /// Considered and set aside because a requirement was not met, or because this
+  /// journey has already declined them.
   INELIGIBLE
-  /// The candidate the engine chose to show. At most one per intake.
+  /// The candidate the engine chose to show. At most one per attempt.
   RECOMMENDED
+  /// The client gave feedback about this match and asked to look again.
+  ///
+  /// A statement about the person's choice, never about the therapist. See
+  /// `Feedback` for why that distinction is carried in the model rather than in a
+  /// convention about how to phrase it.
+  DECLINED
 }
 
 /// The attribute family an evidence item belongs to.
@@ -472,6 +537,18 @@ model Match {
   intakeId    String @db.Uuid
   therapistId String @db.Uuid
 
+  /// Which pass over the candidates this row belongs to, counting from 1.
+  ///
+  /// An intake can be evaluated more than once: that is what asking for another
+  /// option *is*. The first pass recommends; a pass after feedback recommends
+  /// someone different and leaves the previous row alone, so the history reads
+  /// `attempt 1 declined → attempt 2 recommended` rather than being overwritten.
+  ///
+  /// It also scopes the exclusion set. "Already declined" means declined *on this
+  /// intake*, which is the matching journey, so the same therapist is perfectly
+  /// recommendable to a different person or on a different intake later.
+  attempt Int @default(1)
+
   /// Which algorithm produced this row, e.g. "v1".
   ///
   /// Stored on every row because matching logic will change: a result has to be
@@ -499,16 +576,21 @@ model Match {
   intake    Intake          @relation(fields: [intakeId], references: [id], onDelete: Cascade)
   therapist Therapist       @relation(fields: [therapistId], references: [id], onDelete: Cascade)
   evidence  MatchEvidence[]
+  feedback  Feedback?
 
-  /// An intake is evaluated exactly once.
+  /// A candidate is evaluated at most once per pass.
   ///
-  /// The engine is deterministic, so re-running it on the same answers could not
-  /// produce a different result; recording a second set of rows would imply it
-  /// might, and would make "what did we decide, and when" unanswerable. This
-  /// constraint is also the whole of the duplicate-submission safety: a retry
-  /// cannot write twice, because twice is not a shape this table has.
-  @@unique([intakeId, therapistId])
+  /// This is the whole of the duplicate-submission safety, and it works the same way
+  /// for a rematch as it did for a first match: a retry cannot write a second pass,
+  /// because a second pass is a different `attempt` and the service resolves that
+  /// number once, under a unique index, before it writes anything.
+  ///
+  /// The engine is deterministic, so re-running a pass could not produce a different
+  /// result; recording it twice would imply it might, and would make "what did we
+  /// decide, when, and in what order" unanswerable.
+  @@unique([intakeId, attempt, therapistId])
   @@index([intakeId, status])
+  @@index([intakeId, attempt])
   @@index([clientId, createdAt])
   @@index([therapistId])
   @@map("matches")

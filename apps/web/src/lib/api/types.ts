@@ -166,17 +166,56 @@ export interface MatchedTherapist {
   readonly availability: readonly AvailabilityWindowView[];
 }
 
+/**
+ * A recommendation, whichever request produced it.
+ *
+ * One type for the first match and for a rematch, because the server sends one shape
+ * for both: a first match has `attempt` 1, a `null` previous name, an empty
+ * `whatChanged` and an empty `adjustedFor`.
+ *
+ * That uniformity is load-bearing. A refresh of the recommendation page calls the same
+ * endpoint either way, so if the shape depended on which pass the intake was on, the
+ * page would have to detect which it had — and a page that has to detect things is a
+ * page that will eventually render nothing. Making the absence of a change a value to
+ * read, rather than a field to infer, is what removes that whole class of bug.
+ */
 export interface MatchRecommendation {
   readonly matchId: string;
   /** ISO 8601, from the stored decision rather than from a clock in the browser. */
   readonly decidedAt: string;
+  /** Which pass this is. A count of searches, never of anything to do with a person. */
+  readonly attempt: number;
+  /**
+   * Who the client is being moved away from, by name.
+   *
+   * Someone they already saw and already turned down, so naming them is not showing
+   * another candidate — it is what makes "someone else" mean something. No identifier
+   * is sent with it, and no other attribute of theirs. Null on a first match.
+   */
+  readonly previousTherapistName: string | null;
   readonly therapist: MatchedTherapist;
   readonly whyThisMatch: readonly MatchReason[];
+  /**
+   * Up to three differences from the previous recommendation, each one a fact about a
+   * stated attribute or an overlap the engine found.
+   *
+   * May be empty, and that is the honest case: the server sends nothing it cannot
+   * prove changed, so an empty list means exactly that.
+   */
+  readonly whatChanged: readonly ChangeNote[];
+  /**
+   * The reason keys the search was adjusted for. Keys, so each one traces to a rule in
+   * the source. Empty on a first match, where nothing was adjusted.
+   */
+  readonly adjustedFor: readonly string[];
 }
 
 export interface NoCandidateOutcome {
   readonly outcome: 'no_candidate';
-  /** How many were considered. A fact, not a score. */
+  /**
+   * How many people were considered. A count of people, never of score, and the whole
+   * explanation: there was nobody else left who met the conditions.
+   */
   readonly considered: number;
 }
 
@@ -184,4 +223,88 @@ export type MatchOutcome = MatchRecommendation | NoCandidateOutcome;
 
 export function isRecommendation(value: MatchOutcome): value is MatchRecommendation {
   return 'therapist' in value;
+}
+
+// --------------------------------------------------------------------------
+// Feedback and rematching
+//
+// Mirrors `apps/api/src/api/v1/schemas/feedback.ts`.
+//
+// What is deliberately *not* here, and is not merely omitted by accident: a score,
+// a rank, a weight, a percentage, an exclusion list, another candidate, an engine
+// version, and any client or therapist identifier. The server's schemas declare the
+// response `additionalProperties: false`, so a field added on that side fails the
+// API's own tests rather than reaching a browser.
+// --------------------------------------------------------------------------
+
+export interface ChangeNote {
+  /** The stable key for the attribute family. Never a score or a weight. */
+  readonly category: string;
+  readonly sentence: string;
+  readonly detail: string;
+}
+
+/**
+ * A recommendation, whichever request produced it.
+ *
+ * One type for the first match and for a rematch, because the server sends one shape
+ * for both: a first match has `attempt` 1, a `null` previous name, an empty
+ * `whatChanged` and an empty `adjustedFor`. Making the absence of a change a value to
+ * read rather than a field to detect is what keeps a refresh of the recommendation
+ * page rendering the rematch correctly, with no second request and no guesswork.
+ */
+export interface Recommendation {
+  readonly matchId: string;
+  readonly decidedAt: string;
+  /** Which pass this is. A count of searches, never of anything to do with a person. */
+  readonly attempt: number;
+  /**
+   * Who the client is being moved away from, by name.
+   *
+   * Someone they already saw and already turned down, so naming them is not showing
+   * another candidate — it is what makes "someone else" mean something. No identifier
+   * is sent with it.
+   */
+  readonly previousTherapistName: string | null;
+  readonly therapist: MatchedTherapist;
+  readonly whyThisMatch: readonly MatchReason[];
+  /**
+   * Up to three differences from the previous recommendation, each one a fact about a
+   * stated attribute or an overlap the engine found.
+   *
+   * May be empty, and that is the honest case: the server sends nothing it cannot
+   * prove changed, so an empty list means exactly that.
+   */
+  readonly whatChanged: readonly ChangeNote[];
+  /**
+   * The reason keys the search was adjusted for. Keys, so each one traces to a rule.
+   * Empty on a first match, where nothing was adjusted.
+   */
+  readonly adjustedFor: readonly string[];
+}
+
+/**
+ * The rematch call answers with the same recommendation shape, so it shares the type
+ * rather than declaring a lookalike. Two names for one shape is honest — the caller is
+ * genuinely asking a different question — and one shape behind them is what keeps the
+ * page's rendering of "who we found" identical either way.
+ */
+export type { MatchRecommendation as RematchRecommendation };
+export type { MatchOutcome as RematchOutcome };
+export function isRematch(value: MatchOutcome): value is MatchRecommendation {
+  return isRecommendation(value);
+}
+
+export interface FeedbackReceipt {
+  readonly feedbackId: string;
+  readonly matchId: string;
+  readonly reasons: readonly string[];
+  readonly recordedAt: string;
+}
+
+/** One term someone can pick from, as the database holds it. */
+export interface FeedbackReason {
+  readonly key: string;
+  readonly name: string;
+  readonly description: string;
 }

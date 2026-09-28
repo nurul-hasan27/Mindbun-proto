@@ -111,9 +111,9 @@ are in [`frontend-architecture.md`](./frontend-architecture.md).
 | `/`               | implemented | The doorway                                 |
 | `/start`          | implemented | Step 1: what you are looking for            |
 | `/intake`         | implemented | Step 2: the questions                       |
-| `/matching`       | placeholder | Step 3: where a recommendation comes from   |
+| `/matching`       | implemented | Step 3: the search, and the honest failures |
 | `/recommendation` | implemented | Step 4: one person, and the reasons         |
-| `/feedback`       | placeholder | Step 5: how it felt                         |
+| `/feedback`       | implemented | Step 5: what did not fit                    |
 | `/rematch`        | placeholder | Step 6: another attempt                     |
 | `/therapists/:id` | implemented | One therapist profile (outside the journey) |
 | `*`               | implemented | A considered 404                            |
@@ -190,24 +190,37 @@ message }`.
 
 ### Two API surfaces, on purpose
 
-| Endpoint                        | Purpose                                     | CORS | Versioned |
-| ------------------------------- | ------------------------------------------- | ---- | --------- |
-| `GET /health`                   | Infrastructure liveness for uptime checks   | no   | no        |
-| `GET /api/v1/health`            | Service identity and version for the client | yes  | yes       |
-| `GET /api/v1/therapists`        | A page of therapist summaries               | yes  | yes       |
-| `GET /api/v1/therapists/:id`    | One full profile                            | yes  | yes       |
-| `GET /api/v1/intake/vocabulary` | Everything an intake may ask about          | yes  | yes       |
-| `POST /api/v1/intakes`          | Store an intake and its preferences         | yes  | yes       |
-| `POST /api/v1/matches`          | One recommendation, and the reasons         | yes  | yes       |
+| Endpoint                            | Purpose                                     | CORS | Versioned |
+| ----------------------------------- | ------------------------------------------- | ---- | --------- |
+| `GET /health`                       | Infrastructure liveness for uptime checks   | no   | no        |
+| `GET /api/v1/health`                | Service identity and version for the client | yes  | yes       |
+| `GET /api/v1/therapists`            | A page of therapist summaries               | yes  | yes       |
+| `GET /api/v1/therapists/:id`        | One full profile                            | yes  | yes       |
+| `GET /api/v1/intake/vocabulary`     | Everything an intake may ask about          | yes  | yes       |
+| `POST /api/v1/intakes`              | Store an intake and its preferences         | yes  | yes       |
+| `POST /api/v1/matches`              | One recommendation, and the reasons         | yes  | yes       |
+| `GET /api/v1/feedback/reasons`      | The terms someone can pick from             | yes  | yes       |
+| `POST /api/v1/matches/:id/feedback` | What did not fit, about one match           | yes  | yes       |
+| `POST /api/v1/matches/:id/rematch`  | Look again, differently                     | yes  | yes       |
 
 A load balancer can poll a cheap, version-free path while the client talks to a namespace that can
 evolve. `/api/v1` is where future domains land: `api/v1/routes/` gains a module per domain, and a
 future `/api/v2` can be registered beside it without touching v1.
 
-`POST /api/v1/matches` is the only endpoint whose response is deliberately _small_. It carries one
-therapist and a handful of reasons, and the schemas declare `additionalProperties: false` so a
-field added on that side fails the API's own tests rather than quietly reaching a browser. See
-[`matching-engine.md`](./matching-engine.md) for what is excluded and why.
+The two match endpoints whose responses are deliberately _small_ are `POST /api/v1/matches` and
+`POST /api/v1/matches/:id/rematch`. Each carries one therapist and a handful of sentences, and both
+use **one shared schema** in `schemas/recommendation.ts`, declared `additionalProperties: false` on
+every field, so a score added on that side fails the API's own tests rather than quietly reaching a
+browser. A first match is a rematch with an empty exclusion set and no feedback, and sharing the
+schema says so in the type system rather than in a comment. See
+[`matching-engine.md`](./matching-engine.md) and
+[`rematching.md`](./rematching.md) for what is excluded and why.
+
+`POST /api/v1/matches/:id/rematch` takes **no body at all** — not an empty object, and not a
+`content-type`. There is no field through which a caller could name a client, a therapist, an
+exclusion or a weight, because all of those are derived from the match id the path already
+carries. That is the whole of the security model for this phase, and it is structural rather than
+a list of checks that could be forgotten.
 
 ### CORS
 
@@ -323,26 +336,38 @@ No CSS-in-JS, no component library, no state library, no HTTP library (the platf
 `AbortController` is enough), no validation framework, no migration tool beyond Prisma, no
 `clsx` (there is a three-line `cx`), no `dotenv` in the service (Node loads it), no icon package.
 
-## 10. Where Phase 6 attaches
+## 10. Phase 6, and what comes next
 
-The matching engine stored everything a reviewer screen needs, and nothing was built ahead of it:
+Phase 6 is delivered: feedback, and a rematch that takes it into account. The full account is in
+[`rematching.md`](./rematching.md).
 
-| Phase 6 concern         | Where it lands                                                                                                                               |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| A reviewer screen       | `Match`, `MatchEvidence` and the engine's `CandidateTrace`, which is built and returned today and rendered by nothing                        |
-| Rematching              | The engine is pure and a run is immutable, so this is a _new intake_, not a mutation. `ClientPreference.intakeId` already distinguishes them |
-| Feedback                | `Feedback` gains a `matchId`, so a reason can be tied to the decision that produced it                                                       |
-| Geographic matching     | A new structured `TherapistProfile` attribute. Not a free-text location lookup                                                               |
-| Reviewer authentication | A new concern entirely. Nothing in this codebase assumes there is a logged-in user                                                           |
+One prediction this document made before Phase 6 was wrong, and it is worth recording rather than
+quietly editing out. It said rematching would be _a new intake, not a mutation_. It is not: a
+rematch is another **pass over the same intake**, which is what scoping the exclusion set to the
+journey requires. `Match.attempt` carries the pass number and
+`@@unique([intakeId, attempt, therapistId])` keeps a candidate to once per pass, so pass 1 is never
+rewritten and the history is a sequence rather than a set of parallel intakes.
+
+What that leaves for a future phase:
+
+| Concern                 | Where it lands                                                                                                                                   |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A reviewer screen       | `Match`, `MatchEvidence` and the engine's `CandidateTrace`, which is built and returned today and rendered by nothing                            |
+| Loosening a requirement | A real change to `deriveRequirements` plus a way to re-run a pass with different answers. Both no-match pages link to it and say it is not built |
+| Geographic matching     | A new structured `TherapistProfile` attribute. Not a free-text location lookup                                                                   |
+| "This feels right"      | Recording that a match felt right. The control is present, focusable and honest about not existing yet                                           |
+| Reviewer authentication | A new concern entirely. Nothing in this codebase assumes there is a logged-in user                                                               |
 
 Guardrails for those phases, so the visual language survives: no new colour outside the clay and
 sage ramps, no component that wears a card unless it is genuinely a surface, no endpoint without a
 schema and a test, no `any`, no free-text attribute that something has to match on later, and no
 client copy that talks about the person as a user being funnelled.
 
-The one thing Phase 6 must not skip: the internal score and the full candidate list are for a
-reviewer, never for a client. `CandidateTrace` is a separate type from `CandidateEvaluation`
-precisely so that adding it to a response is never a small change.
+The one thing Phase 6 kept, having now had the chance to break it: the internal score and the full
+candidate list are for a reviewer, never for a client. `CandidateTrace` is a separate type from
+`CandidateEvaluation` precisely so that adding it to a response is never a small change. Feedback
+extends what a client may _say_ and what a client may be _shown next_ — it does not extend what a
+client may be shown _at all_.
 
 The one thing Phase 5 established, and a later phase should not quietly undo: a match that cannot be
 explained from stored evidence is a match this product has no business making. Every key the intake

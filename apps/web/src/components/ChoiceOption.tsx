@@ -19,8 +19,9 @@ interface ChoiceOptionProps {
  * reimplemented. Everything visible is a label: no custom widget, no hidden
  * checkbox, no `role` to keep in step by hand.
  *
- * The selected state carries a clay rule, a clay tint and a small mark, so it is
- * never signalled by colour alone.
+ * The selected state carries a clay rule, a clay tint and a small mark, so it is never
+ * signalled by colour alone. The focused state carries a real ring, for the same reason:
+ * a keyboard user has to be able to see where they are.
  */
 export function ChoiceOption({
   choice,
@@ -40,14 +41,16 @@ export function ChoiceOption({
       // rather than trusting that a colour class is doing the work.
       data-checked={checked}
       className={cx(
-        'group border-line focus-within:border-clay-400 hover:border-clay-300 ease-gentle flex cursor-pointer items-start gap-4 border-b py-4 transition-colors duration-200',
+        'group focus-within-ring border-line focus-within:border-clay-400 hover:border-clay-300 ease-gentle flex cursor-pointer items-start gap-4 border-b py-4 transition-colors duration-200',
         checked && 'border-clay-300 bg-clay-50 rounded-control -mx-4 px-4',
       )}
     >
       {/*
-        `sr-only` rather than `hidden`: the input must stay focusable and
-        reachable by a screen reader, and the focus ring is drawn by the label's
-        `focus-within` border.
+        `sr-only` rather than `hidden`: the input must stay focusable and reachable
+        by a screen reader. Being one pixel wide, it cannot carry its own focus ring,
+        so the label's `focus-within-ring` is what a keyboard user actually sees — see
+        `.focus-within-ring` in the stylesheet for why that is a ring and not a border
+        colour.
       */}
       <input
         id={inputId}

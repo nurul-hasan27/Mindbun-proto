@@ -227,45 +227,70 @@ export const sessionFormats: readonly SimpleEntry[] = [
   { key: 'in-person', name: 'In person' },
 ] as const;
 
+/**
+ * The reasons someone can pick from after a recommendation did not feel right.
+ *
+ * Three rules shaped this list, and each cost something:
+ *
+ * 1. **Only reasons the engine can act on.** `location-mismatch` was in the Phase 2
+ *    vocabulary and is deliberately gone. This phase does no geographic matching — a
+ *    `TherapistProfile.location` is a display string, not a structured attribute the
+ *    engine may compare — so offering it would collect something the system could not
+ *    use, and the person would reasonably assume it changed the next search. It did
+ *    not. A reason we cannot act on is worse than no reason, because it is a promise
+ *    with nothing behind it.
+ *
+ * 2. **The key is the contract; the name is copy.** Everything that consumes feedback
+ *    reads `key`. `name` is expected to be rewritten by a copywriter and nothing may
+ *    depend on it.
+ *
+ * 3. **Every name is written from the person who answered it**, and none of them is a
+ *    verdict on the therapist. "The timing didn't work for me" is a report; "wrong
+ *    format" was a judgement, and it is gone for the same reason `sentiment` was.
+ *
+ * `feedbackToSignals` decides what each key does. Three of these — `felt-uncomfortable`
+ * and `other` among them — deliberately do *less* than someone might expect, and the
+ * reasons why are in that file rather than here.
+ */
 export const feedbackReasons: readonly VocabularyEntry[] = [
   {
-    key: 'not-the-right-approach',
-    name: 'Not the right approach',
-    description: 'Their way of working did not suit how you wanted to work.',
-  },
-  {
     key: 'communication-mismatch',
-    name: 'We did not click',
-    description: 'The way they talked did not feel right to you.',
+    name: 'The communication style didn\u2019t feel right.',
+    description: 'The way they talked did not feel like what you were after.',
   },
   {
-    key: 'language-mismatch',
-    name: 'Language barrier',
-    description: 'Getting the words out was harder than it should have been.',
+    key: 'different-experience',
+    name: 'I wanted someone with different experience.',
+    description: 'You were hoping for a different kind of background or context.',
   },
   {
-    key: 'availability-mismatch',
-    name: 'Times did not work',
-    description: 'There was no workable time for both of you.',
-  },
-  {
-    key: 'format-mismatch',
-    name: 'Wrong format',
-    description: 'You wanted a different kind of session.',
+    key: 'not-the-right-approach',
+    name: 'The way they work did not suit me.',
+    description: 'Their approach was not the one you were looking for.',
   },
   {
     key: 'felt-uncomfortable',
-    name: 'Felt uncomfortable',
-    description: 'You did not feel able to be as open as you wanted to be.',
+    name: 'I did not feel understood.',
+    description: 'The session did not feel like a fit to talk in.',
   },
   {
-    key: 'location-mismatch',
-    name: 'Wrong location',
-    description: 'Their location did not work for you.',
+    key: 'availability-mismatch',
+    name: 'The timing did not work for me.',
+    description: 'There was no workable time for both of you.',
+  },
+  {
+    key: 'language-mismatch',
+    name: 'I would prefer someone who speaks another language.',
+    description: 'Getting the words out was harder than it should have been.',
+  },
+  {
+    key: 'format-mismatch',
+    name: 'I would prefer a different session format.',
+    description: 'You wanted a different kind of session.',
   },
   {
     key: 'other',
-    name: 'Something else',
+    name: 'Something else.',
     description: 'Something else, which you can put into your own words.',
   },
 ] as const;

@@ -265,7 +265,7 @@ describe('matching against a real database', () => {
 
     await recommendTherapist(intakeId, { matches, therapists });
 
-    const run = await matches.findRun(intakeId);
+    const run = await matches.findRun(intakeId, 1);
     const availability =
       run?.recommendation?.evidence.filter((item) => item.category === 'AVAILABILITY') ?? [];
 

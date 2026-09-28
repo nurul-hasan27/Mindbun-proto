@@ -14,11 +14,12 @@ import { intakeRoutes } from '../pages/intake/routes';
  * One route tree, shared by the app (browser router) and the tests (memory
  * router), so what is tested is what ships.
  *
- * `/`, `/start` and the whole of `/intake` are implemented. The remaining
- * journey routes are deliberate placeholders: they render the shared
- * `JourneyPlaceholder` and will each grow into its own page as the flow is
- * built. The splat route keeps deep links honest rather than silently landing on
- * the home page.
+ * `/`, `/start`, the whole of `/intake`, and the recommendation → feedback →
+ * looking again → recommendation loop are all implemented. One journey route is
+ * still a deliberate placeholder: `/rematch` renders the shared
+ * `JourneyPlaceholder` and will grow into its own page when something needs a
+ * third pass. The splat route keeps deep links honest rather than silently landing
+ * on the home page.
  */
 export const routeConfig: RouteObject[] = [
   {

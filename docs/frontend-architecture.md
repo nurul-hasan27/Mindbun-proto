@@ -52,17 +52,17 @@ meets a request.
 
 ### Routes
 
-| Route             | State       | Purpose                                    |
-| ----------------- | ----------- | ------------------------------------------ |
-| `/`               | implemented | The doorway                                |
-| `/start`          | implemented | Step 1: what you are looking for           |
-| `/intake/*`       | implemented | Step 2: seven questions, and the review    |
-| `/matching`       | placeholder | Step 3: where a recommendation comes from  |
-| `/recommendation` | implemented | Step 4: one person, and the reasons        |
-| `/feedback`       | placeholder | Step 5: how it felt                        |
-| `/rematch`        | placeholder | Step 6: another attempt                    |
-| `/therapists/:id` | implemented | One therapist profile, outside the journey |
-| `*`               | implemented | A considered 404                           |
+| Route             | State       | Purpose                                     |
+| ----------------- | ----------- | ------------------------------------------- |
+| `/`               | implemented | The doorway                                 |
+| `/start`          | implemented | Step 1: what you are looking for            |
+| `/intake/*`       | implemented | Step 2: seven questions, and the review     |
+| `/matching`       | implemented | Step 3: the search, and its honest failures |
+| `/recommendation` | implemented | Step 4: one person, and the reasons         |
+| `/feedback`       | implemented | Step 5: what did not fit                    |
+| `/rematch`        | placeholder | Step 6: another attempt                     |
+| `/therapists/:id` | implemented | One therapist profile, outside the journey  |
+| `*`               | implemented | A considered 404                            |
 
 `/therapists/:id` deliberately sits **outside** the journey. A profile is something a
 recommendation will point at, so it is reached from there rather than from the journey itself; the
@@ -248,7 +248,37 @@ terms the database actually holds. This is not a nicety: a phrase whose key the 
 heard of would be a 400 at submission, discovered after someone had answered five questions. The
 one list that _is_ the data rather than our copy of it is the language list.
 
-## 10. The recommendation, in this architecture
+## 10. The feedback loop, in this architecture
+
+Three things about `/feedback` and `/matching` are architectural rather than visual, and the
+reasoning is in [`rematching.md`](./rematching.md).
+
+**Two keys in `sessionStorage`, and both are pointers.** `wtm.intake.receipt.v1` holds an intake
+reference and a timestamp. `wtm.match.current.v1` holds a match id, a name the person has already
+been shown, a pass number, and the id and name of the match it replaced. Neither holds an answer,
+neither holds anything a person wrote, and `clearReceipt` — which "Start over" calls — removes
+both. A prototype with no account should leave nothing behind.
+
+**The framing comes from the response, not from storage.** Whether a page is a first match or a
+rematch is `recommendation.attempt > 1` and `recommendation.previousTherapistName`, both of which
+arrive in the body. The browser's record exists so the _feedback page_ can act; it is not what the
+recommendation page renders from. Getting that backwards is invisible until someone reloads, and
+then the page shows a second recommendation with no explanation of why there was one.
+
+**`/matching` navigates in an effect, never during render.** It runs the search on mount and
+replaces itself with the recommendation when there is one. Navigating in a render body would fire
+twice under Strict Mode and make the page's behaviour depend on the renderer. Relatedly, it has **no
+"has started" ref guard**: an earlier version had one, and under Strict Mode the guard stopped the
+second effect run while the first run's cleanup had already aborted its request, so the page hung
+on "one moment" having finished zero searches. The duplicate that Strict Mode permits in
+development is safe at the server, which treats a second request for the same match as a retry.
+
+The loading copy is the same shape as the recommendation's and the same restraint: "Looking through
+the therapists who may fit, using what you told us", announced with `aria-live="polite"`. No
+"analysing", no "AI is thinking", no scan, and no manufactured delay — the whole search is
+milliseconds and a spinner longer than that would be theatre.
+
+## 11. The recommendation, in this architecture
 
 `/recommendation` is the second built step, and it is the one that decides whether the whole
 prototype is honest. Three things about it are architectural rather than visual.
@@ -276,14 +306,24 @@ yet"), and a stored run that recommended nobody ("we couldn't find someone who f
 things you marked as important"). The second is a `200`, not an error, because nobody qualifying is
 an answer to the question that was asked.
 
-## 11. Adding the next feature
+## 12. Adding the next feature
 
-The recommendation step is the next thing to exercise this structure. In rough order:
+The feedback loop exercised the structure in a way the recommendation step did not, and one thing
+came out of it worth keeping: **when a response shape stops being two shapes, it becomes one
+schema.** `POST /matches` and `POST /matches/:id/rematch` used to differ, and the rematch version
+grew fields the first one needed too — a duplicate, a second `additionalProperties: false` to keep
+in step, and a page that had to detect which shape it had. They now share
+`schemas/recommendation.ts`, and every field is present in both, so "there is no change to report"
+is a value rather than a missing key.
 
-1. Add `src/api/v1/schemas/recommendation.ts` and `routes/recommendation.ts` on the server.
-2. Add a `src/lib/api/recommendation.ts` with `getRecommendations()` and mirror the types.
+So, in rough order:
+
+1. Add the schema to `src/api/v1/schemas/`, reusing an existing one if the shape is a variant of
+   something already there rather than a new one.
+2. Add a module in `src/lib/api/` and mirror the types, re-exporting an existing type where the
+   shape is genuinely the same.
 3. Add a page under `src/pages/`, render `<LoadingNote />` / `<ErrorNote />` around the request.
 4. Add the step to `journey` when it becomes real — nothing else in the shell needs to change.
 
-Decide at that point whether the mirrored shapes have outgrown hand-copying and want
-`packages/contracts`. No new dependency, and no change to the design system, should be required.
+At two domains, `packages/contracts` is now clearly worth the build step. No new dependency, and
+no change to the design system, should be required.

@@ -23,14 +23,14 @@ export interface JourneyStep {
 export const journey = [
   { id: 'start', path: paths.start, label: 'Start', state: 'ready' },
   { id: 'intake', path: paths.intake, label: 'The questions', state: 'ready' },
-  { id: 'matching', path: paths.matching, label: 'Finding a fit', state: 'planned' },
+  { id: 'matching', path: paths.matching, label: 'Finding a fit', state: 'ready' },
   {
     id: 'recommendation',
     path: paths.recommendation,
     label: 'The recommendation',
     state: 'ready',
   },
-  { id: 'feedback', path: paths.feedback, label: 'How it felt', state: 'planned' },
+  { id: 'feedback', path: paths.feedback, label: 'How it felt', state: 'ready' },
   { id: 'rematch', path: paths.rematch, label: 'A second look', state: 'planned' },
 ] as const satisfies readonly JourneyStep[];
 

@@ -233,6 +233,14 @@ async function resetDomainData(client: PrismaClient): Promise<void> {
   await client.therapistProfile.deleteMany();
   await client.therapist.deleteMany();
   await client.client.deleteMany();
+
+  // The vocabularies too, so this seed file is genuinely authoritative for them.
+  // `upsertVocabularies` only ever adds or updates by key, which means a term
+  // *removed* from a list in this file would otherwise live on in the database for
+  // ever — and a stale feedback reason is worse than a missing one, because the
+  // interface offers it and the engine has no rule for it.
+  await client.feedbackToReason.deleteMany();
+  await client.feedbackReason.deleteMany();
 }
 
 function requireId(ids: ReadonlyMap<string, string>, key: string, kind: string): string {

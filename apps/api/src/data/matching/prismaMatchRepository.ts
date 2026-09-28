@@ -166,7 +166,7 @@ export function createPrismaMatchRepository(client: PrismaClient): MatchReposito
 
     saveRun: (run: PersistableRun): Promise<StoredRun> =>
       guard(async () => {
-        const alreadyThere = await findRun(client, run.intakeId);
+        const alreadyThere = await findRun(client, run.intakeId, run.attempt);
 
         if (alreadyThere !== null) {
           return alreadyThere;
@@ -181,6 +181,7 @@ export function createPrismaMatchRepository(client: PrismaClient): MatchReposito
                   intakeId: run.intakeId,
                   therapistId: evaluation.therapistId,
                   engineVersion: run.engineVersion,
+                  attempt: run.attempt,
                   score: evaluation.score,
                   status: evaluation.status,
                   rejectionCode: evaluation.rejectionCode,
@@ -194,7 +195,7 @@ export function createPrismaMatchRepository(client: PrismaClient): MatchReposito
         } catch (error) {
           // Another attempt won the race. Its decision is the decision.
           if (isUniqueViolation(error)) {
-            const winner = await findRun(client, run.intakeId);
+            const winner = await findRun(client, run.intakeId, run.attempt);
 
             if (winner !== null) {
               return winner;
@@ -204,7 +205,7 @@ export function createPrismaMatchRepository(client: PrismaClient): MatchReposito
           throw error;
         }
 
-        const stored = await findRun(client, run.intakeId);
+        const stored = await findRun(client, run.intakeId, run.attempt);
 
         if (stored === null) {
           throw new DataStoreUnavailableError('The match could not be read back after writing.');
@@ -213,8 +214,46 @@ export function createPrismaMatchRepository(client: PrismaClient): MatchReposito
         return stored;
       }),
 
-    findRun: (intakeId: string): Promise<StoredRun | null> =>
-      guard(() => findRun(client, intakeId)),
+    findRun: (intakeId: string, attempt: number): Promise<StoredRun | null> =>
+      guard(() => findRun(client, intakeId, attempt)),
+
+    findLatestRun: (intakeId: string): Promise<StoredRun | null> =>
+      guard(async () => {
+        const highest = await client.match.aggregate({
+          where: { intakeId },
+          _max: { attempt: true },
+        });
+
+        return findRun(client, intakeId, highest._max.attempt ?? 1);
+      }),
+
+    findPreviousRun: (intakeId: string, beforeAttempt: number): Promise<StoredRun | null> =>
+      guard(async () => {
+        const highest = await client.match.aggregate({
+          where: { intakeId, attempt: { lt: beforeAttempt } },
+          _max: { attempt: true },
+        });
+
+        return highest._max.attempt === null
+          ? null
+          : findRun(client, intakeId, highest._max.attempt);
+      }),
+
+    resolveNextAttempt: (
+      intakeId: string,
+    ): Promise<{ readonly attempt: number; readonly taken: boolean }> =>
+      guard(async () => {
+        // One read, one number. Two requests arriving together both see the same
+        // highest attempt and both try to write it; the unique index
+        // `(intakeId, attempt, therapistId)` makes the loser fail, and `saveRun`
+        // reads the winner's pass back rather than starting a second one.
+        const highest = await client.match.aggregate({
+          where: { intakeId },
+          _max: { attempt: true },
+        });
+
+        return { attempt: (highest._max.attempt ?? 0) + 1, taken: false };
+      }),
 
     readVocabularyNames: (): Promise<ReadonlyMap<string, string>> =>
       guard(async () => {
@@ -322,9 +361,13 @@ function fromEvidenceRow(row: EvaluationRow['evidence'][number]): MatchEvidenceI
  * recommended nobody is a run with `recommendation: null` — a real outcome, with a
  * real count behind it, rather than a missing one.
  */
-async function findRun(client: PrismaClient, intakeId: string): Promise<StoredRun | null> {
+async function findRun(
+  client: PrismaClient,
+  intakeId: string,
+  attempt: number,
+): Promise<StoredRun | null> {
   const rows = await client.match.findMany({
-    where: { intakeId },
+    where: { intakeId, attempt },
     include: EVALUATION_INCLUDE,
     orderBy: [{ createdAt: 'asc' }, { therapistId: 'asc' }],
   });
@@ -333,12 +376,27 @@ async function findRun(client: PrismaClient, intakeId: string): Promise<StoredRu
     return null;
   }
 
-  const recommended = rows.find((row) => row.status === 'RECOMMENDED');
+  // The row this pass recommended, *or* the row it recommended and the client has since
+  // turned down.
+  //
+  // `DECLINED` can only follow `RECOMMENDED` — it is the single transition the model has,
+  // and `recordFeedback` is the only thing that writes it, against a match id that was a
+  // recommendation. So the two statuses describe the same row at two points in its life,
+  // and matching on either is reading "who was shown" rather than inferring it.
+  //
+  // Looking only for `RECOMMENDED` was a real bug: once a recommendation was declined,
+  // the pass that produced it reported no recommendation at all, and so the *next* page
+  // lost the name of the person the client had come away from and the differences from
+  // them. The evidence was there the whole time; the read was too narrow.
+  const recommended =
+    rows.find((row) => row.status === 'RECOMMENDED') ??
+    rows.find((row) => row.status === 'DECLINED');
   const engineVersion = rows[0]?.engineVersion ?? '';
   const createdAt = rows[0]?.createdAt;
 
   return {
     intakeId,
+    attempt,
     engineVersion,
     createdAt: createdAt === undefined ? '' : createdAt.toISOString(),
     considered: rows.length,

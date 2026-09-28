@@ -64,12 +64,23 @@ export type PreferenceStrength = 'REQUIREMENT' | 'PREFERENCE';
 /**
  * Why a candidate was set aside.
  *
- * Only two conditions can eliminate a candidate, so there are only two reasons.
- * That is a deliberate constraint rather than a gap: a prototype should be unable
- * to set someone aside for a reason nobody wrote down, and adding a code here is
- * the moment someone has to justify the new rule.
+ * Three conditions can eliminate a candidate, so there are three reasons, and adding a
+ * fourth is the moment someone has to justify a new rule in public.
+ *
+ * `DECLINED_PREVIOUSLY` is different in kind from the other two, and deliberately so.
+ * The first two are facts about this therapist and this client: they do not offer a
+ * shared language, or a format the client accepted. The third is a decision the client
+ * already made — "not this one" — and it is recorded as a rejection rather than
+ * silently dropped, so a reviewer reading this journey can see that the person was
+ * considered, and why they are not being shown again. A candidate vanishing without a
+ * trace would be the same as never having been in the list, which is a different and
+ * less honest thing to be.
  */
-export const REJECTION_CODES = ['NO_SHARED_LANGUAGE', 'NO_ACCEPTED_SESSION_FORMAT'] as const;
+export const REJECTION_CODES = [
+  'NO_SHARED_LANGUAGE',
+  'NO_ACCEPTED_SESSION_FORMAT',
+  'DECLINED_PREVIOUSLY',
+] as const;
 export type RejectionCode = (typeof REJECTION_CODES)[number];
 
 /**

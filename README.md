@@ -18,6 +18,16 @@ not feel right, and receive a rematch based on that feedback.
 | ----------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------ |
 | ![Landing page](docs/screenshots/landing-desktop.jpg) | ![Start page](docs/screenshots/start-desktop.jpg) | ![Therapist profile](docs/screenshots/therapist-profile.jpg) |
 
+The feedback loop — turning a recommendation down, and what happens next:
+
+| Saying what did not fit                                    | Looking again                                                 | A second recommendation, and what changed                             |
+| ---------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------- |
+| ![The feedback page](docs/screenshots/p6-feedback-390.jpg) | ![The search](docs/screenshots/p6-matching-searching-390.jpg) | ![What changed this time](docs/screenshots/p6-recommendation-390.jpg) |
+
+| Nobody left                                                    | The same pages on a phone                                  | On a tablet                                                            |
+| -------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------- |
+| ![Nobody left](docs/screenshots/p6-matching-exhausted-390.jpg) | ![Feedback at 320px](docs/screenshots/p6-feedback-320.jpg) | ![Recommendation at 834px](docs/screenshots/p6-recommendation-834.jpg) |
+
 ---
 
 ## Current phase
@@ -27,6 +37,7 @@ not feel right, and receive a rematch based on that feedback.
 **Phase 3 — Domain model + database foundation.** Complete.
 **Phase 4 — Client intake experience.** Complete.
 **Phase 5 — Explainable therapist matching engine.** Complete.
+**Phase 6 — Feedback and explainable rematching.** Complete.
 
 Delivered so far:
 
@@ -35,8 +46,10 @@ Delivered so far:
   shadows, and motion — all in one stylesheet, all contrast-checked.
 - An application shell with a journey-aware header, a position indicator, and route transitions
   that do not destroy page state.
-- Seven journey routes: `/`, `/start`, the whole of `/intake` and `/recommendation` implemented;
-  `/matching`, `/feedback` and `/rematch` present as intentional placeholders for the flow to come.
+- Seven journey routes, six of them implemented: `/`, `/start`, the whole of `/intake`, `/matching`,
+  `/recommendation` and `/feedback`. `/rematch` remains an intentional placeholder — nothing in the
+  loop needs a third pass, and a step that exists only to be clicked is worse than one that does not
+  exist yet.
 - **A complete intake** — seven questions, one at a time, in plain language rather than
   vocabulary names, with a review screen, an optional closing note, and honest handling of
   everything that can go wrong. Reasoning in [`docs/intake-flow.md`](docs/intake-flow.md).
@@ -72,12 +85,55 @@ Delivered so far:
 - **`/recommendation`**, which introduces one person, gives the reasons in plain sentences, links
   to the full profile, and offers "This feels right" as a control that is present, focusable and
   honest about not existing yet.
+- **A feedback loop, and what it actually does.** A recommendation can be turned down with
+  structured reasons and an optional note, and asking again runs **the same engine** with two
+  differences: everyone already declined on this journey is left out, and the categories the person
+  mentioned count for more, up to a ceiling. That is the whole mechanism — no model, nothing stored
+  about the client beyond this journey, and the same intake with the same feedback always producing
+  the same next person. "We took your feedback into account" is true of that; "the system learns"
+  would not be, and a test fails if a page ever says it.
+- **A first-class `Feedback` record, and a rating column deliberately removed.** A Phase 2 sketch
+  had `sentiment` holding `GOOD | MIXED | POOR`. `POOR` is a verdict on a person, and this product
+  does not issue verdicts on people; worse, it is not what the person said. A row now means
+  exactly "the client reported that this match did not feel like a fit, and said so in these
+  terms" — and the model cannot express a claim about the therapist's skill at all.
+- **Feedback never becomes a requirement.** "The communication style didn't feel right" makes style
+  count for more; it never becomes "only show me someone with a different style", which would go on
+  eliminating candidates on someone's behalf for a condition they never stated. A candidate who
+  shares none of the stated style stays eligible however much style is boosted, and a test on the
+  real engine says so.
+- **Two reasons do less than you would expect, honestly.** "I did not feel understood" and
+  "Something else" adjust nothing: not feeling understood is not evidence about a conversational
+  style, and treating it as one would quietly turn a report about an interaction into a claim about
+  a person. They still remove the therapist and get someone different next; they do not claim an
+  adjustment that is not there.
+- **Exclusions scoped to the journey, and a reason removed for honesty.** A therapist declined on
+  one intake is perfectly recommendable to somebody else, or to the same person later — nothing
+  about one search follows a person around the service. And `location-mismatch` was dropped from the
+  reason list, because this phase does no geographic matching and offering it would collect something
+  the system cannot act on. A reason we cannot use is worse than no reason: it is a promise with
+  nothing behind it.
+- **An auditable matching history.** Pass 1 is never rewritten. Each pass writes all fifty
+  candidates under its own attempt number, the previous recommendation keeps its evidence and its
+  reasons, and `RECOMMENDED → DECLINED` is the only transition in the system.
+- **"What changed this time", which is the hardest page to write honestly.** A change is reported
+  only when the person mentioned it, the attributes really are different, and the new person covers
+  their stated preference strictly better — measured with the same share the engine scores with. It
+  says "a more exploratory style" only when the intake said exploratory and the new therapist has
+  it and the last one did not, and it says nothing at all when nothing changed. The stated
+  preference is read from the intake rather than from the previous match's evidence, because a
+  preference only appears in evidence when the therapist happened to share it — and the case worth
+  describing is precisely when they did not.
+- **A security model that is structural rather than a list of checks.** Both new endpoints take one
+  thing: a match id. There is no field through which a browser could name a client, name a
+  therapist, add to the exclusion list, submit a weight, or ask for a particular person. "I don't
+  know that match" and "not your match" are the same answer, in the same words.
 - Tests, strict TypeScript, ESLint (type-aware + jsx-a11y), Prettier, and written documentation.
 
-Deliberately **not** built: rematching, feedback behaviour, a reviewer screen, geographic matching,
-clinical or diagnostic matching, accounts, payments, scheduling, and any AI service. The internal
-ordering figure is not clinically validated — it is a documented prototype heuristic, and the
-document says so.
+Deliberately **not** built: a reviewer screen, geographic matching, clinical or diagnostic matching,
+accounts, authentication, payments, scheduling, a therapist or admin dashboard, and any AI service
+of any kind. The internal ordering figure is not clinically validated — it is a documented
+prototype heuristic, and the document says so.
 
 ## Tech stack
 
@@ -149,15 +205,18 @@ Browser (React)
                   └─ Prisma → PostgreSQL
 ```
 
-| Endpoint                        | Purpose                                        |
-| ------------------------------- | ---------------------------------------------- |
-| `GET /health`                   | Infrastructure liveness: `{"status":"ok"}`     |
-| `GET /api/v1/health`            | Service identity, version and liveness         |
-| `GET /api/v1/therapists`        | A page of therapist summaries, ordered by name |
-| `GET /api/v1/therapists/:id`    | One full profile, including availability       |
-| `GET /api/v1/intake/vocabulary` | Everything an intake may ask about             |
-| `POST /api/v1/intakes`          | Store an intake and its preferences            |
-| `POST /api/v1/matches`          | One recommendation, and the reasons            |
+| Endpoint                            | Purpose                                        |
+| ----------------------------------- | ---------------------------------------------- |
+| `GET /health`                       | Infrastructure liveness: `{"status":"ok"}`     |
+| `GET /api/v1/health`                | Service identity, version and liveness         |
+| `GET /api/v1/therapists`            | A page of therapist summaries, ordered by name |
+| `GET /api/v1/therapists/:id`        | One full profile, including availability       |
+| `GET /api/v1/intake/vocabulary`     | Everything an intake may ask about             |
+| `POST /api/v1/intakes`              | Store an intake and its preferences            |
+| `POST /api/v1/matches`              | One recommendation, and the reasons            |
+| `GET /api/v1/feedback/reasons`      | The terms someone can pick from                |
+| `POST /api/v1/matches/:id/feedback` | What did not fit, about one match              |
+| `POST /api/v1/matches/:id/rematch`  | Look again, taking that into account           |
 
 ```bash
 curl http://127.0.0.1:4000/api/v1/health
@@ -180,10 +239,19 @@ with a sentence explaining which, and never with the value back.
 
 `POST /api/v1/matches` takes one thing — the intake reference — and nothing else. There is no way to
 ask "does this therapist match me?", because that would put the decision in the place it must not be.
-It answers `{ matchId, decidedAt, therapist, whyThisMatch }`, or `{ outcome: "no_candidate",
-considered }` — a `200`, because nobody qualifying is an answer rather than an error. It is safe to
-call repeatedly: an intake is evaluated once, enforced by a unique index rather than by
-application logic, and a retry returns the stored decision instead of searching again.
+It answers `{ matchId, decidedAt, attempt, previousTherapistName, therapist, whyThisMatch,
+whatChanged, adjustedFor }`, or `{ outcome: "no_candidate", considered }` — a `200`, because nobody
+qualifying is an answer rather than an error. It is safe to call repeatedly: an existing pass is
+returned rather than recomputed, enforced by a unique index rather than by application logic. It
+answers with the **latest** pass, so after a rematch you get the person the client is on rather than
+the one they turned down.
+
+`POST /api/v1/matches/:id/feedback` takes `{ reasons, rawText? }` and marks that match `DECLINED`.
+`POST /api/v1/matches/:id/rematch` takes **no body at all** — not an empty object, and not a
+`content-type` — and both share one response schema with `POST /matches`, so a first match and a
+rematch are the same shape. A rematch without feedback is a `409`, because rematching without a
+reason is the endless shuffle this phase exists to prevent. A pool with nobody left in it is a
+`200` with `outcome: "no_candidate"`.
 
 ## Database
 
@@ -262,6 +330,7 @@ therapist routes report `503`. Liveness should not go down because a database is
 │   ├── domain-model.md         entities, relationships, constraints
 │   ├── intake-flow.md          the questions, the mapping, the state, the payload
 │   ├── matching-engine.md      the pipeline, the weights, availability, evidence, limits
+│   ├── rematching.md           feedback, signals, exclusions, history, what changed
 │   ├── design-system.md        the visual language
 │   └── screenshots/
 └── package.json              npm workspaces root
@@ -269,6 +338,10 @@ therapist routes report `503`. Liveness should not go down because a database is
 
 ## Documentation
 
+- [`docs/rematching.md`](docs/rematching.md) — the feedback model and why the rating column was
+  removed, the feedback-to-signal mapping and what it must never become, exclusion behaviour and
+  scope, the rematch lifecycle, the matching history, how "what changed" decides what it may say,
+  the no-match case, the API contract, and the limitations.
 - [`docs/matching-engine.md`](docs/matching-engine.md) — the ten-stage pipeline, how requirements
   are derived, the weights and why they are not clinically validated, the timezone-correct
   availability algorithm, the evidence model, how explanations are generated, how reasons are
@@ -279,7 +352,7 @@ therapist routes report `503`. Liveness should not go down because a database is
 - [`docs/frontend-architecture.md`](docs/frontend-architecture.md) — routing, layouts, the API
   client, and where state is allowed to live.
 - [`docs/architecture.md`](docs/architecture.md) — repository shape, the request path, testing
-  strategy, and the seams Phase 6 will plug into.
+  strategy, and what is left for a future phase.
 - [`docs/design-system.md`](docs/design-system.md) — philosophy, tokens, components, motion,
   accessibility rules.
 
@@ -302,15 +375,31 @@ therapist routes report `503`. Liveness should not go down because a database is
   anything a person wrote. The matching engine is given two types — the client's chosen keys and a
   therapist's declared attributes — and has no access to a name, a biography, a location, a note or
   a clock, so it _cannot_ use them. That is a stronger guarantee than promising it will not.
-- **What someone wrote never reaches a match.** `Intake.rawText` and `ClientPreference.note` are
-  stored and left unparsed, by both the intake flow and the engine. The reasons a client reads are
-  built only from the keys they selected and the attributes a therapist declared.
+- **What someone wrote never reaches a match.** `Intake.rawText`, `ClientPreference.note` and
+  `Feedback.text` are stored and left unparsed — never a matching input, never logged, never read
+  at all. The reasons a client reads are built only from the keys they selected and the attributes a
+  therapist declared, and a "what changed" sentence is built only from two therapists' declared
+  attributes. Verified by scanning every key that has ever appeared in a log line: request ids,
+  methods, urls, status codes and timings, and **zero** request bodies, headers or payloads.
+- **Feedback is a report, and the model cannot state it as a verdict.** A row means "the client
+  reported that this match did not feel like a fit, and said so in these terms." There is no rating
+  column, no score and no sentiment on it, and nothing downstream infers anything about a
+  therapist's skill, their effectiveness, or what they are like to work with.
+- **Feedback is reachable only through a match id**, and "I don't know that match" and "not your
+  match" are the same answer in the same words — so a caller cannot confirm an id exists by asking
+  about someone else's. No response carries a client id, an intake id, a therapist id, the declined
+  therapist's identifier, an exclusion list, or anything the client wrote.
 - **The recommendation response carries nothing that identifies the client.** No intake id, no
   client id, no answers, no score, no count of who else was considered. Asserted against the wire,
   not only against the schema.
-- **After the intake is sent, the browser keeps one reference and nothing else.** A receipt —
-  an identifier and a timestamp — so a refresh returns to the same recommendation. No answer, no
-  words. "Start over" removes it.
+- **After the intake is sent, the browser keeps two references and nothing else.** A receipt — an
+  identifier and a timestamp — so a refresh returns to the same recommendation, and a record of the
+  match being shown: its id, the name the person has already been shown, the pass number, and the id
+  and name of the match it replaced. No answer, no words, no profile. "Start over" removes both.
+- **Declines do not follow a person around.** The exclusion set is scoped to one intake, which is
+  the matching journey. A therapist declined on one search is perfectly recommendable to somebody
+  else, or to the same person on a different intake later — otherwise the pool would quietly shrink
+  each time someone came back, for reasons they could not see and could not undo.
 
 ## Accessibility
 
@@ -325,8 +414,21 @@ Verified in a real browser, not assumed:
 - All decorative SVG is `aria-hidden`; the one meaningful diagram carries a screen-reader caption.
 - `prefers-reduced-motion: reduce` removes every animation, verified with `getAnimations()`.
 - Layouts are designed at 320/390/834/1440px, not simply scaled down. The profile page, all eight
-  intake screens and the recommendation have no horizontal overflow at any of them, verified by
-  measuring `scrollWidth` against `clientWidth` in a real browser.
+  intake screens, the recommendation, the feedback form and the "looking again" step have no
+  horizontal overflow at any of them, verified by measuring `scrollWidth` against `clientWidth`
+  **and** by asking for any element whose right edge passes the viewport, so an overflow hidden
+  behind a clipping ancestor still fails.
+- **A visually hidden control still shows a focus ring.** An `sr-only` checkbox is one pixel wide,
+  so the browser draws its ring on a one-pixel box and nobody sees it; the visible focus has to be
+  carried by the label wrapping it. `.focus-within-ring` gives it the same 2px clay outline the rest
+  of the product uses, rather than a one-pixel border colour change on a state that already has a
+  border. Verified by tabbing through the form and reading the computed outline of each wrapper.
+- **A submit in flight is guarded, not just styled.** `aria-disabled` is a description, not a
+  mechanism — the native form submit does not consult it, so two fast clicks would send twice. The
+  handler refuses as well, and a test presses the disabled-looking button again to prove it.
+- **The waiting states claim nothing.** No "analysing", no "AI is thinking", no scan, no countdown,
+  no progress bar, no numbered stage — the search is milliseconds and there is no stage to count.
+  What it is doing is announced with `aria-live="polite"`.
 - The recommendation's reasons are a real `<ul>` of `<li>` inside a region labelled by its own
   heading, so a screen reader can count them. The unavailable "This feels right" control is
   `aria-disabled` rather than `disabled` — still focusable, still announced, and pointing at a

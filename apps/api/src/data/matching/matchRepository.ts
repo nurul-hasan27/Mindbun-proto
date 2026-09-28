@@ -45,6 +45,14 @@ export interface PersistableRun {
   readonly intakeId: string;
   readonly clientId: string;
   readonly engineVersion: string;
+  /**
+   * Which pass this is, counting from 1.
+   *
+   * Resolved by the caller before the write, once, under a unique index. A first match
+   * is 1; asking for another option is 2, and so on. The previous pass is never
+   * touched, so the history reads as a sequence rather than being overwritten.
+   */
+  readonly attempt: number;
   readonly evaluations: readonly PersistableEvaluation[];
 }
 
@@ -71,12 +79,27 @@ export interface StoredRecommendation {
  */
 export interface StoredRun {
   readonly intakeId: string;
+  /** Which pass this is. 1 for a first match, and one more for each rematch. */
+  readonly attempt: number;
   readonly engineVersion: string;
   /** ISO 8601, when the decision was made. */
   readonly createdAt: string;
   /** How many candidates were evaluated, eligible or not. */
   readonly considered: number;
   readonly recommendation: StoredRecommendation | null;
+}
+
+/** Every pass on an intake, oldest first. The auditable history. */
+export interface MatchHistoryEntry {
+  readonly attempt: number;
+  readonly matchId: string;
+  readonly therapistId: string;
+  readonly displayName: string;
+  readonly status: 'ELIGIBLE' | 'INELIGIBLE' | 'RECOMMENDED' | 'DECLINED';
+  /** The reasons given, when this recommendation was turned down. */
+  readonly declinedFor: readonly string[];
+  /** ISO 8601, from the stored row. */
+  readonly decidedAt: string;
 }
 
 /** A candidate's availability, as stored, in the therapist's own zone. */
@@ -107,13 +130,40 @@ export interface MatchRepository {
   >;
 
   /**
-   * Stage 10. Idempotent per intake: calling it twice for the same intake must
-   * leave one set of rows, not two, and must return the run either way.
+   * Stage 10. Idempotent per `(intake, attempt)`: calling it twice for the same pass
+   * must leave one set of rows, not two, and must return the run either way.
    */
   saveRun(run: PersistableRun): Promise<StoredRun>;
 
-  /** A previous decision for this intake, if there is one. */
-  findRun(intakeId: string): Promise<StoredRun | null>;
+  /** One pass for an intake, or null when it has not been made. */
+  findRun(intakeId: string, attempt: number): Promise<StoredRun | null>;
+
+  /**
+   * The most recent pass for an intake — the current recommendation.
+   *
+   * Latest, not first. "Give me a recommendation for this intake" must answer with the
+   * one the person is on, and after a rematch that is the newest pass. Returning the
+   * first would show them the person they just turned down, which is the opposite of
+   * what they asked for.
+   */
+  findLatestRun(intakeId: string): Promise<StoredRun | null>;
+
+  /**
+   * The pass before the newest one, for the "what changed" comparison.
+   *
+   * Null on a first match, which is why the comparison may legitimately be empty.
+   */
+  findPreviousRun(intakeId: string, beforeAttempt: number): Promise<StoredRun | null>;
+
+  /**
+   * The next pass number for an intake, and whether it has already been taken.
+   *
+   * Resolving the number in one place, under a unique index, is what makes a
+   * concurrent pair of rematch requests produce one pass rather than two.
+   */
+  resolveNextAttempt(
+    intakeId: string,
+  ): Promise<{ readonly attempt: number; readonly taken: boolean }>;
 
   /** Vocabulary key → display name, so the explanation layer can speak. */
   readVocabularyNames(): Promise<ReadonlyMap<string, string>>;

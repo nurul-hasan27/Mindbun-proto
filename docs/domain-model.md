@@ -193,9 +193,24 @@ exactly when the status is `INELIGIBLE` — a row with no reason is not a shape 
 `engineVersion` (`"v1"`) is on every row because matching logic will change, and a result has to be
 attributable to the rules that produced it or it can be neither explained nor recognised as stale.
 
-`@@unique([intakeId, therapistId])` is the whole of the duplicate-submission safety: an intake is
-evaluated once, and a retry cannot write a second set of rows, because twice is not a shape this
-table has.
+`@@unique([intakeId, attempt, therapistId])` is the whole of the duplicate-submission safety: a
+candidate is evaluated at most once per _pass_, and a retry cannot write a second pass at the same
+number, because twice is not a shape this table has.
+
+`attempt` exists because an intake can be evaluated more than once — asking for another option is
+a thing the product does. It also scopes the exclusion set: "already declined" means declined on
+_this intake_, which is the matching journey, so the same therapist is perfectly recommendable to
+somebody else, or to the same person on a different intake later. Nothing about one search follows
+a person around the service. See [`rematching.md` → exclusions](rematching.md#exclusions).
+
+`status` gained a fourth value, `DECLINED`: the client gave feedback about this match and asked to
+look again. It is the only transition in the system, it happens exactly once per match, and it is a
+statement about their choice rather than about the therapist.
+
+`SUPERSEDED` was offered and **deliberately not modelled.** Nothing reaches it: a match that was
+offered and turned down is `DECLINED`, not superseded, and a candidate that simply lost an ordering
+is `ELIGIBLE` and stays `ELIGIBLE`. A state no code path can reach is a state nobody can reason
+about.
 
 ### `MatchEvidence`
 
@@ -212,22 +227,45 @@ The `overlap*` columns are filled for `AVAILABILITY` and null for every other ca
 shape is unambiguous from its columns alone. That invariant is asserted by a test rather than left
 for a reader to infer.
 
+### `FeedbackToReason`
+
+The m:n join between feedback and the reason vocabulary, because multiple reasons make real product
+sense and a single one would be a lie: "the timing didn't work and I didn't feel understood" is one
+thing a person can mean, and forcing them to pick the half that mattered more would lose the part
+that mattered to them.
+
+`@@id([feedbackId, reasonId])` makes a duplicate pair impossible, and both sides cascade, so losing
+a match loses the reasons with it.
+
 ### `Feedback`
 
-`clientId`, `therapistId`, `sentiment`, `reasonId?`, `text?`, `createdAt`.
+`clientId`, `intakeId`, `therapistId`, `matchId` (unique), `text?`, `createdAt`, and the
+`reasons` relation above.
 
-Two deliberate choices:
+A row means exactly this: **the client reported that this match did not feel like a fit, and said
+so in these terms.** Not that the therapist is ineffective, not that they are a poor communicator,
+not that they lack experience. Those are claims about a person, and this model cannot express them
+— which is the point, because a table that could would eventually be read as making them.
 
-- **No `updatedAt`.** Feedback is a record of a past moment. If it changes, it is a new row, and
-  pretending otherwise would blur the history that a rematch is supposed to learn from.
-- **`reason` is structured, `text` is optional.** "The approach didn't fit" is the input a rematch
-  can act on. "It didn't feel like them" is something a person may want to add. The first drives
-  the product; the second is honoured but not mined.
+Four decisions, and the reasoning is the interesting part:
 
-**There is no `recommendationId` yet.** Feedback points at the therapist directly, which is exactly
-right while recommendations do not exist. When the `Recommendation` entity lands it will gain a
-`recommendationId` and the backfill is a nullable column — documented as a known follow-up rather
-than modelled as a stub table with two columns and no meaning.
+- **`sentiment` was removed.** A Phase 2 sketch had a `GOOD | MIXED | POOR` column here. `POOR` is
+  a verdict on a person, and this product's entire argument is that finding someone to talk to is
+  not shopping — a star rating is shopping. Worse, `POOR` is not what the person said: they said
+  _this did not feel right for me_, which is a fact about their experience. Nothing referenced the
+  column and nothing had ever held it.
+- **`matchId` is required and unique.** Required, so feedback cannot be detached from the decision
+  it responds to and read as a general opinion of a person — the follow-up this model was carrying
+  explicitly is now closed. Unique, because one recommendation is declined once: a double submit
+  is one row, not a second opinion. That is the whole of the duplicate-safety for the endpoint, in
+  the same way `(intakeId, attempt, therapistId)` is for a pass.
+- **`clientId`, `intakeId` and `therapistId` are derived from the match**, never accepted from a
+  caller. They are stored because they make the record readable and indexable, and the repository
+  reads all three off the match inside the same transaction that writes the row.
+- **`text` is stored, never parsed, never logged, and never a matching input.** Same treatment as
+  `Intake.rawText`. It is here because the product is built on someone being allowed to say more
+  than a checkbox allows. There is no `updatedAt`: feedback is a record of a past moment, and if it
+  changed it would be a new row.
 
 ---
 
@@ -243,6 +281,9 @@ than modelled as a stub table with two columns and no meaning.
 | Free-form tags on therapists               | A tag string is a matching attribute nobody can join against.                                                                                                                |
 | Scores, weights, ranking shown to a client | A scoreboard is the thing this product exists to argue against. The engine has an internal integer ordering figure; it is stored, never sent. See `docs/matching-engine.md`. |
 | A `Recommendation` entity                  | A recommendation is a `Match` with `status = RECOMMENDED`. A third table would hold nothing but a pointer back to the evaluation it is.                                      |
+| A rating, a star score, a thumbs up/down   | A verdict on a person, and not what the person said. The Phase 2 `sentiment` column was removed rather than migrated — see `Feedback` above.                                 |
+| A client preference profile across intakes | Feedback adjusts one journey and is then forgotten. A global exclusion list would quietly shrink the pool each time someone came back, for reasons they could not see.       |
+| `SUPERSEDED`                               | No code path reaches it. A declined match is `DECLINED`; a candidate that lost an ordering is still `ELIGIBLE`.                                                              |
 
 ---
 

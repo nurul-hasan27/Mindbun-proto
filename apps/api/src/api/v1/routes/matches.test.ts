@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, type MockedFunction } from 'vitest';
 import { buildApp } from '../../../app.js';
+import type { FeedbackRepository } from '../../../data/matching/feedbackRepository.js';
 import type {
   MatchRepository,
   MatchableIntake,
@@ -40,6 +41,7 @@ const MATCHABLE: MatchableIntake = {
 
 const STORED_RUN: StoredRun = {
   intakeId: INTAKE_ID,
+  attempt: 1,
   engineVersion: 'v1',
   createdAt: '2026-09-30T09:00:00.000Z',
   considered: 50,
@@ -99,12 +101,18 @@ const THERAPIST = {
 interface Fakes {
   readonly matches: MatchRepository;
   readonly therapists: TherapistRepository;
+  /** Absent unless a test supplies one, so the wiring itself is under test. */
+  readonly feedback?: FeedbackRepository;
   readonly loadMatchableIntake: MockedFunction<MatchRepository['loadMatchableIntake']>;
   readonly saveRun: MockedFunction<MatchRepository['saveRun']>;
   readonly findRun: MockedFunction<MatchRepository['findRun']>;
 }
 
-function fakes(overrides: Partial<Record<keyof MatchRepository, unknown>> = {}): Fakes {
+function fakes(
+  overrides: Partial<Record<keyof MatchRepository, unknown>> & {
+    feedback?: Partial<FeedbackRepository>;
+  } = {},
+): Fakes {
   const loadMatchableIntake = vi.fn(() => Promise.resolve(MATCHABLE));
   const saveRun = vi.fn(() => Promise.resolve(STORED_RUN));
   const findRun = vi.fn(() => Promise.resolve<StoredRun | null>(null));
@@ -128,6 +136,8 @@ function fakes(overrides: Partial<Record<keyof MatchRepository, unknown>> = {}):
       ]),
     saveRun,
     findRun,
+    findLatestRun: findRun,
+    resolveNextAttempt: () => Promise.resolve({ attempt: 1, taken: false }),
     readVocabularyNames: () =>
       Promise.resolve(
         new Map([
@@ -149,11 +159,24 @@ function fakes(overrides: Partial<Record<keyof MatchRepository, unknown>> = {}):
     hasArea: () => Promise.resolve(true),
   } as unknown as TherapistRepository;
 
-  return { matches, therapists, loadMatchableIntake, saveRun, findRun };
+  const feedback = (overrides.feedback ?? {}) as unknown as FeedbackRepository;
+
+  return {
+    matches,
+    therapists,
+    ...(overrides.feedback === undefined ? {} : { feedback }),
+    loadMatchableIntake,
+    saveRun,
+    findRun,
+  };
 }
 
 function appWith(built: Fakes) {
-  return buildApp({ matches: built.matches, therapists: built.therapists });
+  return buildApp({
+    matches: built.matches,
+    therapists: built.therapists,
+    ...(built.feedback === undefined ? {} : { feedback: built.feedback }),
+  });
 }
 
 type Payload = string | readonly unknown[] | Readonly<Record<string, unknown>>;
@@ -258,7 +281,7 @@ describe('POST /api/v1/matches', () => {
   });
 
   it('serves a stored decision again rather than running the engine twice', async () => {
-    const built = fakes({ findRun: vi.fn(() => Promise.resolve(STORED_RUN)) });
+    const built = fakes({ findLatestRun: vi.fn(() => Promise.resolve(STORED_RUN)) });
 
     const response = await post(built, { intakeId: INTAKE_ID });
 
@@ -270,12 +293,13 @@ describe('POST /api/v1/matches', () => {
   it('answers 200 with an outcome when nothing qualified', async () => {
     const nothingQualified: StoredRun = {
       intakeId: INTAKE_ID,
+      attempt: 1,
       engineVersion: 'v1',
       createdAt: '2026-09-30T09:00:00.000Z',
       considered: 50,
       recommendation: null,
     };
-    const built = fakes({ findRun: vi.fn(() => Promise.resolve(nothingQualified)) });
+    const built = fakes({ findLatestRun: vi.fn(() => Promise.resolve(nothingQualified)) });
 
     const response = await post(built, { intakeId: INTAKE_ID });
 
