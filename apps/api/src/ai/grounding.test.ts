@@ -108,6 +108,48 @@ describe('a summary that invents something', () => {
     });
   }
 
+  /**
+   * A case whose own stored text contains an apostrophe.
+   *
+   * The bug this pins: the check had two tokenisers, and they disagreed. One split `didn't`
+   * into `didn`; the other stripped punctuation by deletion and produced `didnt`. So the
+   * vocabulary held `didn`, the summary was checked for `didnt`, and every summary quoting a
+   * client's own stored reason was refused. Not a wrong answer — an inability to see one.
+   */
+  it('matches a case’s own apostrophes, which two tokenisers could not', () => {
+    const withApostrophe: AiCaseContext = {
+      ...CONTEXT,
+      priorFeedback: ["The communication style didn't feel right."],
+    };
+
+    const result = assertGroundedIn(
+      ok({
+        summary:
+          'They are looking for support around Work stress. Ananya Rao does not carry Exploratory.',
+        observations: [
+          "In an earlier search they said: The communication style didn't feel right.",
+        ],
+      }),
+      withApostrophe,
+    );
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('still refuses an apostrophe word the case does not contain', () => {
+    const result = assertGroundedIn(
+      ok({
+        summary: "They haven't spoken to anyone since March.",
+        observations: ['They speak Hindi.'],
+      }),
+      CONTEXT,
+    );
+
+    // The control for the test above: `havent` is not in this case, and joining the
+    // apostrophe correctly is not the same as accepting everything.
+    expect(result.ok).toBe(false);
+  });
+
   it('names the invented words in its reason, so a swapped provider can be debugged', () => {
     const result = assertGroundedIn(
       ok({ summary: 'EMDR and Priya Sharma are relevant here.' }),

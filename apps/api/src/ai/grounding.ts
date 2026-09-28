@@ -610,7 +610,21 @@ export function normaliseSummary(raw: AiCaseSummary): AiCaseSummary {
   };
 }
 
-/** Every word, lowercased, with punctuation stripped and no stemming. */
+/**
+ * Every word, lowercased, split on anything that is not a letter or a digit.
+ *
+ * **One tokeniser, used by both sides of the comparison.**
+ *
+ * There were two, and they disagreed. This one splits `didn't` into `didn` and `t`; the
+ * other stripped punctuation by *deletion* and produced `didnt`. So a case whose own stored
+ * text contained an apostrophe could never match a summary quoting that same text — the
+ * vocabulary held `didn` and the summary was checked for `didnt`, and every summary
+ * containing a client's own reason was refused.
+ *
+ * That is the whole class of bug a grounding check cannot survive: not being wrong about a
+ * fact, but being unable to see one. One function, called by both, is the only way to make
+ * that impossible rather than unlikely.
+ */
 function words(text: string): readonly string[] {
   return text
     .toLowerCase()
@@ -698,9 +712,41 @@ const COUNT_WORDS: Readonly<Record<number, string>> = {
   6: 'six',
 };
 
-/** A capitalised word, whether or not it starts a sentence. */
-function isCapitalised(token: string): boolean {
-  return /^[A-Z]/.test(token) && !/^[A-Z]+\d/.test(token);
+/**
+ * The word as it was written, for a log line a developer will read.
+ *
+ * The tokeniser lowercases and splits, which is what makes the vocabulary lookup work and
+ * what makes a log line useless: `sharm` for "Sharma". The reason a refused summary is
+ * reported names what to go and look for, so it needs the surface form.
+ */
+function surface(sentence: string, word: string): string {
+  for (const raw of sentence.split(/\s+/)) {
+    if (raw.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '').toLowerCase() === word) {
+      return raw.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '');
+    }
+  }
+
+  return word;
+}
+
+/**
+ * Whether a word in a sentence was written with a capital.
+ *
+ * Reads the *original* surface form rather than the tokeniser's output, because lowercasing
+ * is what makes the vocabulary lookup work and what makes the capital check impossible. The
+ * caller passes the sentence, and this finds the word within it.
+ */
+function isCapitalised(sentence: string, word: string): boolean {
+  for (const raw of sentence.split(/\s+/)) {
+    const cleaned = raw.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '');
+
+    if (cleaned.toLowerCase() === word) {
+      // A sentence-initial capital is just English, so it is not evidence of anything.
+      return raw.trimStart() === raw && /^[A-Z]/.test(raw);
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -734,60 +780,66 @@ export function assertGroundedIn(raw: AiCaseSummary, context: AiCaseContext): Gr
   const unknownNames: string[] = [];
   const unknownClaims: string[] = [];
 
-  // Tokenised on whitespace and stripped of punctuation, so a word is compared without the
-  // comma or full stop it arrived wearing. An earlier version tracked each token's position
-  // as well, to distinguish a sentence-initial capital from one mid-sentence; that turned out
-  // to be unnecessary, because the connective and vocabulary lists are matched
-  // case-insensitively and a sentence-initial name is in the case anyway.
-  const tokens = prose.split(/\s+/).filter((token) => token !== '');
+  /*
+   * Split on whitespace first rather than reading a flat word list, because a capitalised
+   * word means something different at the start of a sentence: "Ananya Rao does not carry
+   * Exploratory" opens with a name, while "While they speak Hindi" opens with a
+   * conjunction. The first word of each sentence is therefore checked case-insensitively
+   * like the rest, and any *other* capitalised word is held to the strict rule.
+   */
+  const sentences = prose.split(/(?<=[.!?])\s+/);
 
-  for (const raw of tokens) {
-    const token = raw.replace(/[^A-Za-z0-9-]/g, '');
-
-    if (token === '') {
-      continue;
-    }
-
-    const bare = token.toLowerCase();
-
-    // A digit. Any digit at all, unless the case contains that number. A matcher has no way
-    // to check a figure, so a figure that is not traceable is a figure that should not be
-    // on the page.
-    if (/\d/.test(token)) {
-      if (!caseVocabulary.has(bare)) {
-        unknownClaims.push(`figure ${token}`);
+  for (const sentence of sentences) {
+    for (const token of words(sentence)) {
+      // A digit. Any digit at all, unless the case contains that number. A matcher has no
+      // way to check a figure, so a figure that is not traceable is a figure that should
+      // not be on the page.
+      if (/\d/.test(token)) {
+        if (!caseVocabulary.has(token) && !caseVocabulary.has(stem(token))) {
+          unknownClaims.push(`figure ${token}`);
+        }
+        continue;
       }
-      continue;
-    }
 
-    if (CONNECTIVES.has(bare) || REPORTING.has(bare) || caseVocabulary.has(stem(bare))) {
-      continue;
-    }
+      if (CONNECTIVES.has(token) || REPORTING.has(token) || caseVocabulary.has(stem(token))) {
+        continue;
+      }
 
-    // A capitalised word that is neither ordinary English nor in the case. This is the
-    // check that catches a name the case never mentioned, and an attribute — "EMDR", "CBT",
-    // "PTSD" — that is not in anyone's stored evidence.
-    if (isCapitalised(token)) {
-      unknownNames.push(token);
-      continue;
-    }
+      // A capitalised word that is neither ordinary English nor in the case. This is the
+      // check that catches a name the case never mentioned, and an attribute — "EMDR",
+      // "CBT", "PTSD" — that is not in anyone's stored evidence.
+      if (isCapitalised(sentence, token)) {
+        unknownNames.push(surface(sentence, token));
+        continue;
+      }
 
-    // A lower-case content word nobody accounted for. Refused, because the alternative is a
-    // claim nobody can trace.
-    unknownClaims.push(bare);
+      // A lower-case content word nobody accounted for. Refused, because the alternative is
+      // a claim nobody can trace.
+      unknownClaims.push(token);
+    }
   }
 
-  if (unknownNames.length > 0) {
+  /*
+   * Every untraceable word, not just the first.
+   *
+   * Bailing at the first was one-line shorter and worse: a developer swapping providers gets
+   * one invented word, fixes it, and discovers the next. The reason is a log line, so naming
+   * all of them costs nothing and saves a round trip.
+   */
+  const names = [...new Set(unknownNames)].sort();
+  const claims = [...new Set(unknownClaims)].sort();
+
+  if (names.length > 0) {
     return {
       ok: false,
-      reason: `the summary named things absent from the case: ${[...new Set(unknownNames)].sort().join(', ')}`,
+      reason: `the summary named things absent from the case: ${names.join(', ')}`,
     };
   }
 
-  if (unknownClaims.length > 0) {
+  if (claims.length > 0) {
     return {
       ok: false,
-      reason: `the summary used terms absent from the case: ${[...new Set(unknownClaims)].sort().join(', ')}`,
+      reason: `the summary used terms absent from the case: ${claims.join(', ')}`,
     };
   }
 
