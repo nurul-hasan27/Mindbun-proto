@@ -55,7 +55,8 @@ const VOCABULARY: IntakeVocabularyView = {
 const readVocabulary = (): Promise<IntakeVocabularyView> => Promise.resolve(VOCABULARY);
 const provider = createMockAiProvider(readVocabulary);
 
-const KEYS_OF = (signals: readonly { key: string }[]): readonly string[] => signals.map((s) => s.key);
+const KEYS_OF = (signals: readonly { key: string }[]): readonly string[] =>
+  signals.map((s) => s.key);
 
 describe('the mock provider, as a conversation', () => {
   it('greets before anyone has said anything, and explains the rules only there', async () => {
@@ -105,7 +106,9 @@ describe('the mock provider, as a conversation', () => {
   });
 
   it('is deterministic: the same transcript always produces the same reply', async () => {
-    const messages = [{ role: 'user' as const, text: 'I moved to Germany and feel like an outsider.' }];
+    const messages = [
+      { role: 'user' as const, text: 'I moved to Germany and feel like an outsider.' },
+    ];
 
     const first = await provider.nextTurn(messages, {});
     const second = await provider.nextTurn(messages, {});
@@ -117,7 +120,10 @@ describe('the mock provider, as a conversation', () => {
 describe('the mock provider, as an interpreter', () => {
   it('reads a plain description of work and preference into real vocabulary keys', async () => {
     const signals = await provider.extractSignals([
-      { role: 'user', text: "I've been overwhelmed at work lately and I'd rather talk things through." },
+      {
+        role: 'user',
+        text: "I've been overwhelmed at work lately and I'd rather talk things through.",
+      },
     ]);
 
     expect(KEYS_OF(signals)).toEqual(expect.arrayContaining(['work-stress', 'exploratory']));
@@ -132,9 +138,7 @@ describe('the mock provider, as an interpreter', () => {
     ]);
 
     const context = signals.filter((signal) => signal.category === 'context');
-    expect(KEYS_OF(context)).toEqual(
-      expect.arrayContaining(['relocation', 'family-expectations']),
-    );
+    expect(KEYS_OF(context)).toEqual(expect.arrayContaining(['relocation', 'family-expectations']));
   });
 
   it('reads a preference stated in the person’s own words as high confidence', async () => {
@@ -235,10 +239,13 @@ describe('suggestion targets', () => {
 
   it('treats a named approach as the same answer as a named conversation style', () => {
     const asApproach = resolveTarget({ category: 'approach', key: 'exploratory' }, VOCABULARY);
-    const asStyle = resolveTarget({ category: 'communicationStyle', key: 'exploratory' }, VOCABULARY);
+    const asStyle = resolveTarget(
+      { category: 'communicationStyle', key: 'exploratory' },
+      VOCABULARY,
+    );
 
     expect(asApproach).toEqual(asStyle);
-    expect(CATEGORY_FAMILY['approach']).toBe(CATEGORY_FAMILY['communicationStyle']);
+    expect(CATEGORY_FAMILY.approach).toBe(CATEGORY_FAMILY.communicationStyle);
   });
 
   it('refuses a key that is not in the vocabulary', () => {
@@ -262,9 +269,16 @@ describe('suggestion targets', () => {
   });
 
   it('describes a time hint in the product’s own wording', () => {
-    const target = resolveTarget({ category: 'availability', key: 'hint:evening:MONDAY-TUESDAY' }, VOCABULARY);
+    const target = resolveTarget(
+      { category: 'availability', key: 'hint:evening:MONDAY-TUESDAY' },
+      VOCABULARY,
+    );
 
-    expect(target).toMatchObject({ kind: 'availabilityHint', part: 'evening', days: ['MONDAY', 'TUESDAY'] });
+    expect(target).toMatchObject({
+      kind: 'availabilityHint',
+      part: 'evening',
+      days: ['MONDAY', 'TUESDAY'],
+    });
     expect(target).toMatchObject({ label: 'Mondays, Tuesdays evenings' });
   });
 });
@@ -419,9 +433,10 @@ describe('the provider contract', () => {
   });
 
   it('rejects with AiUnavailableError and nothing else, so one catch is enough', async () => {
-    await expect(provider.nextTurn([{ role: 'user', text: 'hello' }], {})).resolves.toMatchObject({
-      reply: expect.any(String),
-    });
+    const turn = await provider.nextTurn([{ role: 'user', text: 'hello' }], {});
+
+    expect(typeof turn.reply).toBe('string');
+    expect(turn.reply.length).toBeGreaterThan(0);
 
     // The error type exists and carries a reason rather than a provider body, which is what
     // the route logs. Asserted here so a future edit cannot widen what it carries.

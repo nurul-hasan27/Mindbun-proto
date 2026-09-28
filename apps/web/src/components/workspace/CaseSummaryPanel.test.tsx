@@ -67,7 +67,10 @@ describe('before it is asked for', () => {
   });
 
   it('says up front that it cannot change anything', () => {
-    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('{}', { status: 200 }))));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response('{}', { status: 200 }))),
+    );
 
     render(<CaseSummaryPanel matchId={MATCH_ID} />);
 
@@ -78,7 +81,7 @@ describe('before it is asked for', () => {
 describe('when it is asked for', () => {
   function stub(handler: StubHandler): void {
     const { fetchImpl } = stubFetch(handler);
-    vi.stubGlobal('fetch', fetchImpl as never);
+    vi.stubGlobal('fetch', fetchImpl);
   }
 
   it('shows the summary, the observations and the tradeoffs', async () => {
@@ -158,7 +161,7 @@ describe('when it cannot be trusted', () => {
       status,
       json: { statusCode: status, error: 'x', message: 'The case summary could not be trusted.' },
     }));
-    vi.stubGlobal('fetch', fetchImpl as never);
+    vi.stubGlobal('fetch', fetchImpl);
   }
 
   it('says the summary was left out rather than shown unchecked', async () => {
@@ -224,7 +227,7 @@ describe('when it cannot be trusted', () => {
 describe('accessibility', () => {
   it('has one heading for the panel and one per list', async () => {
     const { fetchImpl } = stubFetch(() => ({ json: SUMMARY }));
-    vi.stubGlobal('fetch', fetchImpl as never);
+    vi.stubGlobal('fetch', fetchImpl);
     const user = userEvent.setup();
 
     render(<CaseSummaryPanel matchId={MATCH_ID} />);
@@ -240,7 +243,7 @@ describe('accessibility', () => {
 
   it('reaches every control by keyboard', async () => {
     const { fetchImpl } = stubFetch(() => ({ json: SUMMARY }));
-    vi.stubGlobal('fetch', fetchImpl as never);
+    vi.stubGlobal('fetch', fetchImpl);
     const user = userEvent.setup();
 
     render(<CaseSummaryPanel matchId={MATCH_ID} />);

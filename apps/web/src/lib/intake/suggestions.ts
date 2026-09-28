@@ -64,9 +64,7 @@ export function applySuggestion(draft: IntakeDraft, suggestion: AiSuggestion): A
           // suggestion must not silently change an answer the person gave deliberately.
           return ok(
             toggleCommunicationStyle(
-              draft.openToGuidance
-                ? { ...draft, openToGuidance: false }
-                : draft,
+              draft.openToGuidance ? { ...draft, openToGuidance: false } : draft,
               suggestion.key,
             ),
           );
@@ -81,7 +79,11 @@ export function applySuggestion(draft: IntakeDraft, suggestion: AiSuggestion): A
             setSessionFormats(draft, [...new Set([...draft.sessionFormats, suggestion.key])]),
           );
         default:
-          return { ok: false, key: suggestion.key, failure: { kind: 'unknown-target', key: suggestion.key } };
+          return {
+            ok: false,
+            key: suggestion.key,
+            failure: { kind: 'unknown-target', key: suggestion.key },
+          };
       }
     }
 
@@ -96,7 +98,11 @@ export function applySuggestion(draft: IntakeDraft, suggestion: AiSuggestion): A
       return ok(draft);
 
     default:
-      return { ok: false, key: suggestion.key, failure: { kind: 'unknown-target', key: suggestion.key } };
+      return {
+        ok: false,
+        key: suggestion.key,
+        failure: { kind: 'unknown-target', key: suggestion.key },
+      };
   }
 }
 
@@ -146,7 +152,10 @@ export function applySuggestions(
 export function availabilityHintDelta(
   draft: IntakeDraft,
   target: Extract<SuggestionTarget, { kind: 'availabilityHint' }>,
-): { readonly part: 'morning' | 'afternoon' | 'evening' | null; readonly days: readonly string[] } | null {
+): {
+  readonly part: 'morning' | 'afternoon' | 'evening' | null;
+  readonly days: readonly string[];
+} | null {
   const newDays = target.days.filter((day) => !draft.days.includes(day));
   const partIsNew = target.part !== null && !draft.timeOfDay.includes(target.part);
 

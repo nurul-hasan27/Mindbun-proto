@@ -45,7 +45,10 @@ describe('writing into the vocabulary families', () => {
   });
 
   it('adds a context under the draft’s own plural name', () => {
-    const result = applySuggestion(draft(), suggestion('relocation', into('contextualExperiences')));
+    const result = applySuggestion(
+      draft(),
+      suggestion('relocation', into('contextualExperiences')),
+    );
 
     // The vocabulary endpoint says `contextualExperience`; the draft says
     // `contextualExperiences`. The server sends the field, and this is the only place the
@@ -186,14 +189,11 @@ describe('what it refuses', () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(result.ok === false && result.failure.kind).toBe('unknown-target');
+    expect(!result.ok && result.failure.kind).toBe('unknown-target');
   });
 
   it('refuses a draft field it does not recognise', () => {
-    const result = applySuggestion(
-      draft(),
-      suggestion('mystery', into('moods' as never)),
-    );
+    const result = applySuggestion(draft(), suggestion('mystery', into('moods' as never)));
 
     expect(result.ok).toBe(false);
   });
@@ -204,7 +204,7 @@ describe('what it refuses', () => {
       suggestion('mystery', undefined as unknown as SuggestionTarget),
     );
 
-    expect(result.ok === false && result.failure.kind).toBe('no-target');
+    expect(!result.ok && result.failure.kind).toBe('no-target');
   });
 
   it('reports every failure rather than stopping at the first', () => {

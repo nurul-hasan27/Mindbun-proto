@@ -74,7 +74,7 @@ function isMessage(value: unknown): value is AiMessage {
 
   return (
     typeof candidate.role === 'string' &&
-    ROLES.includes(candidate.role as AiMessage['role']) &&
+    ROLES.includes(candidate.role) &&
     typeof candidate.text === 'string' &&
     candidate.text !== ''
   );

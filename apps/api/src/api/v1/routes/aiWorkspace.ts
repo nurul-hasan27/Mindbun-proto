@@ -4,10 +4,7 @@ import { buildCaseContext } from '../../../ai/caseContext.js';
 import { assertGroundedIn } from '../../../ai/grounding.js';
 import { findCase, type WorkspaceDeps } from '../../../data/matching/workspaceService.js';
 import { isUuid } from '../../../data/validators.js';
-import {
-  aiMatchSummaryResponseSchema,
-  type AiMatchSummaryResponse,
-} from '../schemas/ai.js';
+import { aiMatchSummaryResponseSchema, type AiMatchSummaryResponse } from '../schemas/ai.js';
 import { errorResponseSchema, type ErrorResponse } from '../schemas/therapists.js';
 import { sendStoreFailure } from './matches.js';
 
@@ -117,7 +114,7 @@ export function buildAiWorkspaceRoutes(deps: AiWorkspaceRouteDeps): FastifyPlugi
           const detail = await findCase(request.params.matchId, deps);
 
           if (detail === null) {
-            return reply.status(404).send(unknownCase());
+            return await reply.status(404).send(unknownCase());
           }
 
           const context = buildCaseContext(detail);
@@ -129,10 +126,11 @@ export function buildAiWorkspaceRoutes(deps: AiWorkspaceRouteDeps): FastifyPlugi
             // *which* word was invented; a person reading a log should not be shown model
             // output, and the case's own free text is not in it either way.
             request.log.warn({ reason: grounded.reason }, 'ai case summary refused');
-            return reply.status(502).send({
+            return await reply.status(502).send({
               statusCode: 502,
               error: 'Bad Gateway',
-              message: 'The case summary could not be trusted, so it has been left out. The evidence is unchanged.',
+              message:
+                'The case summary could not be trusted, so it has been left out. The evidence is unchanged.',
             });
           }
 
@@ -143,7 +141,7 @@ export function buildAiWorkspaceRoutes(deps: AiWorkspaceRouteDeps): FastifyPlugi
             provider: deps.ai.name,
           };
 
-          return reply.send(response);
+          return await reply.send(response);
         } catch (error) {
           if (error instanceof AiUnavailableError) {
             request.log.warn({ reason: error.name }, 'ai case summary unavailable');

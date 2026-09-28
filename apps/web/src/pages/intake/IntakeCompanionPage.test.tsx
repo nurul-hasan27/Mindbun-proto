@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { IntakeProvider } from '../../lib/intake/IntakeProvider';
@@ -110,7 +110,7 @@ function mockFetch(): void {
   vi.stubGlobal(
     'fetch',
     vi.fn((input: RequestInfo | URL) => {
-      const url = String(input);
+      const url = requestUrl(input);
 
       if (url.includes('/intake/vocabulary')) {
         return Promise.resolve(json(VOCABULARY));
@@ -137,6 +137,47 @@ function renderCompanion(): void {
       </IntakeProvider>
     </MemoryRouter>,
   );
+}
+
+/**
+ * The first of a list, as a definite element.
+ *
+ * Throws rather than returning a possibly-undefined one, because an assertion about
+ * `undefined` would pass for the wrong reason and a missing button should be a failure
+ * rather than a click on nothing.
+ */
+function firstOf<T>(items: readonly T[]): T {
+  const [first] = items;
+
+  if (first === undefined) {
+    throw new Error('Expected at least one element.');
+  }
+
+  return first;
+}
+
+/** A `fetch` input as a URL. The client always passes a string. */
+function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') {
+    return input;
+  }
+
+  if (input instanceof URL) {
+    return input.href;
+  }
+
+  throw new Error('The client must pass a URL string to fetch.');
+}
+
+/** Every URL the app has requested, in order. */
+function allRequestUrls(): readonly string[] {
+  return vi.mocked(globalThis.fetch).mock.calls.map((call) => requestUrl(call[0]));
+}
+
+function lastRequestUrl(): string {
+  const urls = allRequestUrls();
+
+  return firstOf(urls.slice(-1));
 }
 
 beforeEach(() => {
@@ -207,12 +248,12 @@ describe('the conversation', () => {
     renderCompanion();
     await ready();
 
-    const field = screen.getByRole('textbox') as HTMLTextAreaElement;
+    const field = screen.getByRole('textbox');
     await user.type(field, 'Something I want on the record.');
     await user.click(screen.getByRole('button', { name: 'Send' }));
 
     await screen.findByText('Something I want on the record.');
-    expect(field.value).toBe('');
+    expect(field).toHaveValue('');
   });
 
   it('makes exactly one request per message sent', async () => {
@@ -254,7 +295,10 @@ describe('the conversation', () => {
 
 describe('the suggestions', () => {
   async function reachSuggestions(user: ReturnType<typeof userEvent.setup>): Promise<void> {
-    await user.type(screen.getByRole('textbox'), 'Work has been stressful and I want to talk it through.');
+    await user.type(
+      screen.getByRole('textbox'),
+      'Work has been stressful and I want to talk it through.',
+    );
     await user.click(screen.getByRole('button', { name: 'Send' }));
     await screen.findByText('What is the harder part of it?');
 
@@ -276,9 +320,7 @@ describe('the suggestions', () => {
     expect(
       screen.getByText('You mentioned something that sounds like work stress.'),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/nothing has been saved yet/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/nothing has been saved yet/i)).toBeInTheDocument();
   });
 
   it('offers keep, change and not quite, with none chosen', async () => {
@@ -303,8 +345,7 @@ describe('the suggestions', () => {
     await ready();
     await reachSuggestions(user);
 
-    const [first] = screen.getAllByRole('button', { name: 'Keep' });
-    await user.click(first as HTMLElement);
+    await user.click(firstOf(screen.getAllByRole('button', { name: 'Keep' })));
 
     // The control that was pressed is now the one reading "Already saved" — keeping the same
     // node rather than replacing it is what lets a screen reader perceive the state change
@@ -321,7 +362,7 @@ describe('the suggestions', () => {
     await ready();
     await reachSuggestions(user);
 
-    await user.click(screen.getAllByRole('button', { name: 'Not quite' })[0] as HTMLElement);
+    await user.click(firstOf(screen.getAllByRole('button', { name: 'Not quite' })));
 
     // One rejected, so one Undo and one surviving trio.
     expect(screen.getAllByRole('button', { name: 'Undo' })).toHaveLength(1);
@@ -403,7 +444,9 @@ describe('when the assistant does not work', () => {
     await user.type(screen.getByRole('textbox'), 'Something I should not lose.');
     await user.click(screen.getByRole('button', { name: 'Send' }));
 
-    expect(await screen.findByText(/something went wrong while interpreting that/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/something went wrong while interpreting that/i),
+    ).toBeInTheDocument();
     // The words are still on the page. This is the whole point of the failure state.
     expect(screen.getByText('Something I should not lose.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
@@ -411,10 +454,7 @@ describe('when the assistant does not work', () => {
 
   it('says the assistant is switched off when it is, rather than sounding broken', async () => {
     mockApi({
-      turn: () =>
-        Promise.resolve(
-          serverError(503, 'The conversation assistant is switched off.'),
-        ),
+      turn: () => Promise.resolve(serverError(503, 'The conversation assistant is switched off.')),
     });
 
     const user = userEvent.setup();
@@ -474,9 +514,7 @@ describe('when the assistant does not work', () => {
     // No composer, and no offer to keep matching. This is the one case where continuing
     // would be the wrong thing.
     expect(screen.queryByRole('textbox')).toBeNull();
-    expect(
-      screen.getByRole('button', { name: /continue to the questions/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /continue to the questions/i })).toBeInTheDocument();
   });
 
   it('keeps the conversation going after a request for care is redirected', async () => {
@@ -548,7 +586,9 @@ describe('accessibility and layout', () => {
     await screen.findByText('What is the harder part of it?');
     await user.click(screen.getByRole('button', { name: /show me what you understood/i }));
 
-    expect(await screen.findByRole('heading', { level: 2, name: /here’s what i heard/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 2, name: /here’s what i heard/i }),
+    ).toBeInTheDocument();
   });
 
   it('gives the field a label and describes the keyboard behaviour', async () => {
@@ -600,10 +640,8 @@ describe('what leaves the browser', () => {
     await user.click(screen.getByRole('button', { name: 'Send' }));
     await screen.findByText('What is the harder part of it?');
 
-    const call = turn.mock.calls.at(-1);
-    expect(call).toBeDefined();
+    const url = lastRequestUrl();
 
-    const url = String(vi.mocked(globalThis.fetch).mock.calls.at(-1)?.[0] ?? '');
     // A POST, so nothing about what was said can end up in a URL, a log line, or a Referer.
     expect(url).toContain('/ai/intake/turn');
     expect(url).not.toContain('stressful');
@@ -620,7 +658,7 @@ describe('what leaves the browser', () => {
     await user.click(screen.getByRole('button', { name: /show me what you understood/i }));
     await screen.findByText('Here’s what I heard');
 
-    const calls = vi.mocked(globalThis.fetch).mock.calls.map((entry) => String(entry[0]));
+    const calls = allRequestUrls();
 
     // The whole AI surface is two POSTs and a vocabulary read. Nothing here writes.
     expect(calls.some((url) => url.includes('/intakes'))).toBe(false);
@@ -649,8 +687,8 @@ describe('what leaves the browser', () => {
 
     expect(Array.isArray(parsed)).toBe(true);
     expect(parsed).toHaveLength(3);
-    for (const entry of parsed as unknown[]) {
-      expect(Object.keys(entry as object).sort()).toEqual(['role', 'text']);
+    for (const entry of parsed as object[]) {
+      expect(Object.keys(entry).sort()).toEqual(['role', 'text']);
     }
   });
 });

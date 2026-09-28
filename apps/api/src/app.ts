@@ -33,10 +33,12 @@ export interface BuildAppOptions {
    * to be tested rather than asserted, and a test cannot read what it cannot capture. The
    * production wiring never passes one.
    */
-  readonly logger?: false | {
-    readonly level: LogLevel;
-    readonly stream?: Writable;
-  };
+  readonly logger?:
+    | false
+    | {
+        readonly level: LogLevel;
+        readonly stream?: Writable;
+      };
   /** Browser origins allowed to call the API. */
   readonly corsOrigins?: readonly string[];
   /**

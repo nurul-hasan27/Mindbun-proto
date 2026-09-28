@@ -71,7 +71,8 @@ describe('requests for care, diagnosis or treatment', () => {
   });
 
   it('offers the thing it can help with, rather than only refusing', () => {
-    const reply = guardTurn([{ role: 'user', text: 'What medication should I take?' }])?.reply ?? '';
+    const reply =
+      guardTurn([{ role: 'user', text: 'What medication should I take?' }])?.reply ?? '';
 
     expect(reply).toMatch(/put into words what you are looking for/i);
   });
@@ -99,7 +100,9 @@ describe('mentions of self-harm', () => {
   it('is handled before a care request, because it is not a request for anything', () => {
     // "do I need treatment" is both a care request and, in this sentence, distress. It must
     // get the distress answer, because that is the one that points at real support.
-    expect(inspectMessage('Do I need treatment, or am I going to end my life?').kind).toBe('distress');
+    expect(inspectMessage('Do I need treatment, or am I going to end my life?').kind).toBe(
+      'distress',
+    );
   });
 
   it('never offers to keep matching after it has answered', () => {

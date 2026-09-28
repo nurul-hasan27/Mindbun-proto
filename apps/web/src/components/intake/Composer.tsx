@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Button } from '../Button';
 import { cx } from '../../lib/cx';
 
@@ -69,7 +69,7 @@ export function Composer({
     node.style.height = `${node.scrollHeight}px`;
   }, [value]);
 
-  const submit = (event?: FormEvent): void => {
+  const submit = (event?: { preventDefault: () => void }): void => {
     event?.preventDefault();
 
     if (!canSend) {
@@ -109,7 +109,7 @@ export function Composer({
         onKeyDown={onKeyDown}
         aria-describedby={cx(helpId, tooLong ? counterId : undefined)}
         className={cx(
-          'placeholder:text-ink-faint text-body text-ink border-line-strong mt-3 w-full resize-none rounded-control border bg-transparent px-4 py-3 transition-colors duration-200',
+          'placeholder:text-ink-faint text-body text-ink border-line-strong rounded-control mt-3 w-full resize-none border bg-transparent px-4 py-3 transition-colors duration-200',
           'placeholder:font-body focus:border-clay-400 focus:outline-none',
           'disabled:cursor-not-allowed disabled:opacity-60',
         )}

@@ -26,6 +26,15 @@ function clientReturning(handler: StubHandler) {
 
 const ok = (json: unknown): StubResponseInit => ({ json });
 
+/** The request body, parsed. The client always sends a JSON string. */
+function parseBody(body: BodyInit | null | undefined): unknown {
+  if (typeof body !== 'string') {
+    throw new Error(`Expected a JSON string body, received ${typeof body}.`);
+  }
+
+  return JSON.parse(body);
+}
+
 const MESSAGES = [{ role: 'user' as const, text: 'Work has been stressful.' }];
 
 const TURN_REPLY = { reply: 'Tell me more.', readyToSummarise: false, provider: 'mock' } as const;
@@ -53,7 +62,7 @@ describe('requestAiTurn', () => {
     const turn = await requestAiTurn(MESSAGES, {}, client);
 
     expect(turn).toEqual(TURN_REPLY);
-    expect(JSON.parse(String(calls[0]?.init.body))).toEqual({ messages: MESSAGES, known: {} });
+    expect(parseBody(calls[0]?.init.body)).toEqual({ messages: MESSAGES, known: {} });
   });
 
   it('posts, so nothing typed can end up in a URL', async () => {

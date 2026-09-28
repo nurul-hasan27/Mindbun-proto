@@ -60,11 +60,7 @@ export type AiSignalConfidence = 'low' | 'medium' | 'high';
 
 /** The draft fields a suggestion can write to. Mirrors the server's `DRAFT_FIELDS`. */
 export type DraftField =
-  | 'areasOfWork'
-  | 'communicationStyles'
-  | 'contextualExperiences'
-  | 'languages'
-  | 'sessionFormats';
+  'areasOfWork' | 'communicationStyles' | 'contextualExperiences' | 'languages' | 'sessionFormats';
 
 /**
  * Where a kept suggestion lands, decided by the server.

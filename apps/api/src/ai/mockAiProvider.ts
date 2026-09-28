@@ -238,7 +238,16 @@ const STYLE_CUES: Readonly<Record<string, readonly string[]>> = {
     'step by step',
   ],
   warm: ['warm', 'kind', 'gentle', 'safe', 'comfortable', 'listening', 'caring', 'soft'],
-  direct: ['direct', 'straight', 'honest', 'say it', 'blunt', 'no fuss', 'straightforward', 'plain'],
+  direct: [
+    'direct',
+    'straight',
+    'honest',
+    'say it',
+    'blunt',
+    'no fuss',
+    'straightforward',
+    'plain',
+  ],
   reflective: ['reflect', 'reflective', 'think about', 'meaning', 'mirror back', 'looking back'],
   gentle: ['gentle', 'slow', 'at my pace', 'patient', 'not pushed', 'no rush', 'take it slow'],
 };
@@ -445,10 +454,7 @@ export function createMockAiProvider(readVocabulary: ReadVocabulary): AiProvider
     name: 'mock',
     available: true,
 
-    async nextTurn(
-      messages: readonly AiMessage[],
-      known: AiKnownAnswers,
-    ): Promise<AiTurn> {
+    async nextTurn(messages: readonly AiMessage[], known: AiKnownAnswers): Promise<AiTurn> {
       const fromUser = messages.filter((message) => message.role === 'user');
       const said = fromUser.map((message) => message.text).join(' \n ');
 
@@ -461,7 +467,9 @@ export function createMockAiProvider(readVocabulary: ReadVocabulary): AiProvider
 
       const signals = suggest(said, await readVocabulary());
       const askedAll = everyFamilyAnswered(known);
-      const enough = fromUser.length >= MIN_MESSAGES_BEFORE_SUMMARISING && signals.length >= MIN_SIGNALS_TO_SUMMARISE;
+      const enough =
+        fromUser.length >= MIN_MESSAGES_BEFORE_SUMMARISING &&
+        signals.length >= MIN_SIGNALS_TO_SUMMARISE;
 
       if (enough || (askedAll && signals.length > 0)) {
         return { reply: SUMMARY_LEAD, readyToSummarise: true };
@@ -495,8 +503,10 @@ export function createMockAiProvider(readVocabulary: ReadVocabulary): AiProvider
       }));
     },
 
-    async summariseCase(context: AiCaseContext): Promise<AiCaseSummary> {
-      return summarise(context);
+    // A function rather than an `async` one: it reads no vocabulary and touches no network,
+    // so there is nothing to await. Declared as returning a promise because that is the port.
+    summariseCase(context: AiCaseContext): Promise<AiCaseSummary> {
+      return Promise.resolve(summarise(context));
     },
   };
 }
@@ -639,7 +649,11 @@ function suggest(said: string, vocabulary: IntakeVocabularyView): Suggestion[] {
   }
 
   // "I don't know" is a real answer, and the intake has a key for it.
-  if (/\b(do ?n'?t know|not sure|unsure|no idea|whatever you (?:think|recommend)|guide me|surprise me)\b/i.test(text)) {
+  if (
+    /\b(do ?n'?t know|not sure|unsure|no idea|whatever you (?:think|recommend)|guide me|surprise me)\b/i.test(
+      text,
+    )
+  ) {
     add({
       category: 'guidance',
       key: OPEN_TO_GUIDANCE_KEY,
@@ -671,7 +685,8 @@ function suggest(said: string, vocabulary: IntakeVocabularyView): Suggestion[] {
  * So when in doubt, skip. `than` is included even though it is sometimes a comparison rather
  * than a rejection, for exactly that reason.
  */
-const NEGATED_BEFORE = /\b(?:not|never|instead of|rather than|than|do not|don't|dont|didn't|avoid|rather not)\b/;
+const NEGATED_BEFORE =
+  /\b(?:not|never|instead of|rather than|than|do not|don't|dont|didn't|avoid|rather not)\b/;
 
 /** How far back to look for a rejection. A clause, not a paragraph. */
 const NEGATION_LOOKBACK = 24;
@@ -682,7 +697,10 @@ function cueFor(
   name: string,
   cues: Readonly<Record<string, readonly string[]>>,
 ): { explicit: boolean } | null {
-  const words = name.toLowerCase().split(/[^a-z]+/).filter((word) => word.length > 3);
+  const words = name
+    .toLowerCase()
+    .split(/[^a-z]+/)
+    .filter((word) => word.length > 3);
   const phrases = cues[key] ?? [];
 
   // A phrase match is a person putting it in their own words. A bare word lifted from the

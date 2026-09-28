@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react';
 import type { AiMessage } from '../../lib/api/ai';
 import { cx } from '../../lib/cx';
 
@@ -74,13 +73,10 @@ function Turn({ message }: { readonly message: AiMessage }) {
   const fromUser = message.role === 'user';
 
   return (
-    <div className={cx('border-line grid grid-cols-[3.25rem_1fr] gap-x-3 border-t py-6 sm:gap-x-5')}>
-      <p
-        className={cx(
-          'text-label pt-1 uppercase',
-          fromUser ? 'text-ink-faint' : 'text-clay-700',
-        )}
-      >
+    <div
+      className={cx('border-line grid grid-cols-[3.25rem_1fr] gap-x-3 border-t py-6 sm:gap-x-5')}
+    >
+      <p className={cx('text-label pt-1 uppercase', fromUser ? 'text-ink-faint' : 'text-clay-700')}>
         {fromUser ? 'You' : 'Assistant'}
       </p>
 
@@ -92,34 +88,4 @@ function Turn({ message }: { readonly message: AiMessage }) {
       <p className="text-body text-ink min-w-0 text-pretty">{message.text}</p>
     </div>
   );
-}
-
-/**
- * Scrolls to the newest turn, once, when one arrives.
- *
- * A `ref` and an effect rather than `scrollIntoView` on every render: a conversation is read
- * from where it ends, and a page that jumps while someone is scrolling back to re-read
- * something is worse than one that does not move at all. The effect keys on the message count
- * for the same reason.
- *
- * `behavior: 'smooth'` is CSS-honoured here — the `prefers-reduced-motion` block in
- * `index.css` sets `scroll-behavior: auto` under that preference, so this needs no
- * JavaScript check of its own.
- */
-export function useScrollToNewest(dependency: number): React.RefObject<HTMLDivElement | null> {
-  const end = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const node = end.current;
-
-    // Guarded, because `scrollIntoView` does not exist in every environment this runs in —
-    // jsdom has no layout and does not implement it — and a missing method must not take the
-    // page down with it. Scrolling is an enhancement; the transcript is fully readable
-    // without it.
-    if (typeof node?.scrollIntoView === 'function') {
-      node.scrollIntoView({ block: 'end' });
-    }
-  }, [dependency]);
-
-  return end;
 }

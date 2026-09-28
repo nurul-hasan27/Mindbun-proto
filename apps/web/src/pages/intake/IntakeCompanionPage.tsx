@@ -6,10 +6,16 @@ import { Eyebrow } from '../../components/Eyebrow';
 import { LoadingNote } from '../../components/LoadingNote';
 import { QuietButton } from '../../components/QuietButton';
 import { TextLink } from '../../components/TextLink';
-import { ConversationLog, useScrollToNewest } from '../../components/intake/ConversationLog';
+import { ConversationLog } from '../../components/intake/ConversationLog';
+import { useScrollToNewest } from '../../components/intake/useScrollToNewest';
 import { Composer } from '../../components/intake/Composer';
 import { SuggestionList, type SuggestionVerdict } from '../../components/intake/SuggestionList';
-import { requestAiExtraction, requestAiTurn, type AiMessage, type AiSuggestion } from '../../lib/api/ai';
+import {
+  requestAiExtraction,
+  requestAiTurn,
+  type AiMessage,
+  type AiSuggestion,
+} from '../../lib/api/ai';
 import { isApiError, toApiError, type ApiError } from '../../lib/api/errors';
 import { useIntake } from '../../lib/intake/intakeContext';
 import { applyAvailabilityHint, applySuggestion } from '../../lib/intake/suggestions';
@@ -63,12 +69,31 @@ export function IntakeCompanionPage() {
   const { draft, update, vocabulary } = useIntake();
   const navigate = useNavigate();
 
-  const [messages, setMessages] = useState<readonly AiMessage[]>(() => loadConversation());
+  /*
+   * The greeting, rendered locally rather than requested.
+   *
+   * Two reasons, and the second is the one that decided it. A person should not wait on a
+   * network round trip to be invited to speak — and the page must work at all when there is
+   * no assistant, so a request would be the wrong shape for this message even if it were
+   * fast.
+   *
+   * Seeded into the initial state rather than pushed by an effect, because an effect that
+   * calls `setState` on mount costs an extra render for a value that was already known when
+   * the page was created. It is also plain text this file owns, so a reviewer can read
+   * exactly what the product says on arrival without running anything.
+   */
+  const [messages, setMessages] = useState<readonly AiMessage[]>(() => {
+    const saved = loadConversation();
+
+    return saved.length > 0 ? saved : [{ role: 'assistant', text: GREETING }];
+  });
   const [pending, setPending] = useState(false);
   const [turnError, setTurnError] = useState<ApiError | null>(null);
   const [extractError, setExtractError] = useState<ApiError | null>(null);
   const [suggestions, setSuggestions] = useState<readonly AiSuggestion[] | null>(null);
-  const [notUnderstood, setNotUnderstood] = useState<readonly { category: string; key: string }[]>([]);
+  const [notUnderstood, setNotUnderstood] = useState<readonly { category: string; key: string }[]>(
+    [],
+  );
   const [surplus, setSurplus] = useState<readonly { category: string; key: string }[]>([]);
   const [verdicts, setVerdicts] = useState<Readonly<Record<string, SuggestionVerdict>>>({});
   const [unavailable, setUnavailable] = useState(false);
@@ -83,28 +108,6 @@ export function IntakeCompanionPage() {
     setMessages(next);
     saveConversation(next);
   }, []);
-
-  /**
-   * The greeting.
-   *
-   * Rendered locally rather than requested, for two reasons. A person should not wait on a
-   * network round trip to read "tell me in your own words" — and the page must work at all
-   * when there is no assistant. It is therefore plain text this file owns, which also means
-   * a reviewer can see exactly what the product says on arrival without running anything.
-   */
-  useEffect(() => {
-    if (messages.length > 0) {
-      return;
-    }
-
-    const greeting: AiMessage = {
-      role: 'assistant',
-      text:
-        'You don’t need to know what kind of therapy you need, or any of the words therapists use for it. Tell me in your own words what has been going on.',
-    };
-
-    remember([greeting]);
-  }, [messages.length, remember]);
 
   // Abandoned on unmount and whenever a newer request starts, so a slow reply for an earlier
   // message can never overwrite the one that was actually asked for.
@@ -157,7 +160,7 @@ export function IntakeCompanionPage() {
           setUnavailable(GUARD_ENDS.test(turn.reply));
         },
         (reason: unknown) => {
-          if (controller.signal.aborted || isApiError(reason) && reason.kind === 'aborted') {
+          if (controller.signal.aborted || (isApiError(reason) && reason.kind === 'aborted')) {
             return;
           }
 
@@ -194,7 +197,7 @@ export function IntakeCompanionPage() {
         setPending(false);
       },
       (reason: unknown) => {
-        if (controller.signal.aborted || isApiError(reason) && reason.kind === 'aborted') {
+        if (controller.signal.aborted || (isApiError(reason) && reason.kind === 'aborted')) {
           return;
         }
 
@@ -207,7 +210,10 @@ export function IntakeCompanionPage() {
   const keep = useCallback(
     (suggestion: AiSuggestion) => {
       const result = applySuggestion(draft, suggestion);
-      setVerdicts((current) => ({ ...current, [`${suggestion.category}:${suggestion.key}`]: 'kept' }));
+      setVerdicts((current) => ({
+        ...current,
+        [`${suggestion.category}:${suggestion.key}`]: 'kept',
+      }));
 
       if (result.ok && result.draft !== draft) {
         update(() => result.draft);
@@ -217,7 +223,10 @@ export function IntakeCompanionPage() {
   );
 
   const reject = useCallback((suggestion: AiSuggestion) => {
-    setVerdicts((current) => ({ ...current, [`${suggestion.category}:${suggestion.key}`]: 'rejected' }));
+    setVerdicts((current) => ({
+      ...current,
+      [`${suggestion.category}:${suggestion.key}`]: 'rejected',
+    }));
   }, []);
 
   const change = useCallback(
@@ -232,7 +241,7 @@ export function IntakeCompanionPage() {
       }
 
       const question = questionFor(suggestion);
-      navigate(question === null ? intakePath('support') : intakePath(question));
+      void navigate(question === null ? intakePath('support') : intakePath(question));
     },
     [draft, navigate, update],
   );
@@ -263,7 +272,8 @@ export function IntakeCompanionPage() {
   );
 
   const keptCount = Object.values(verdicts).filter((verdict) => verdict === 'kept').length;
-  const hintSuggestions = suggestions?.filter((entry) => entry.target.kind === 'availabilityHint') ?? [];
+  const hintSuggestions =
+    suggestions?.filter((entry) => entry.target.kind === 'availabilityHint') ?? [];
 
   return (
     <section className="wash-quiet">
@@ -271,14 +281,12 @@ export function IntakeCompanionPage() {
         <div className="max-w-2xl">
           <Eyebrow>Optional · before the questions</Eyebrow>
 
-          <h1 className="font-display text-title mt-6 text-balance">
-            Tell us in your own words.
-          </h1>
+          <h1 className="font-display text-title mt-6 text-balance">Tell us in your own words.</h1>
 
-          <p className="text-lead text-ink-muted mt-5 max-w-measure text-pretty">
-            Write what has been going on, and we’ll show you what we understood before anything
-            is saved. You can keep what’s right, change what isn’t, or skip all of it and answer
-            the questions instead.
+          <p className="text-lead text-ink-muted max-w-measure mt-5 text-pretty">
+            Write what has been going on, and we’ll show you what we understood before anything is
+            saved. You can keep what’s right, change what isn’t, or skip all of it and answer the
+            questions instead.
           </p>
         </div>
 
@@ -295,21 +303,21 @@ export function IntakeCompanionPage() {
             </p>
           )}
 
-          {turnError !== null && (
-            <TurnError error={turnError} onRetry={() => setTurnError(null)} />
-          )}
+          {turnError !== null && <TurnError error={turnError} onRetry={() => setTurnError(null)} />}
 
           {!unavailable && (
             <div className="border-line border-t py-7">
               <Composer
                 onSend={send}
                 disabled={pending}
-                unavailableReason={turnError === null ? null : 'Your message is still here. Try sending it again.'}
+                unavailableReason={
+                  turnError === null ? null : 'Your message is still here. Try sending it again.'
+                }
               />
             </div>
           )}
 
-          {unavailable && <EndedNote onContinue={() => navigate(intakePath('support'))} />}
+          {unavailable && <EndedNote onContinue={() => void navigate(intakePath('support'))} />}
 
           {/*
             The offer to summarise is a button, not an automatic step. Auto-summarising after
@@ -342,7 +350,7 @@ export function IntakeCompanionPage() {
               )}
 
               {extractError !== null && (
-                <p className="mt-4 text-small text-clay-700" role="alert">
+                <p className="text-small text-clay-700 mt-4" role="alert">
                   Something went wrong while reading that back. What you wrote is still here.{' '}
                   <QuietButton onClick={askForSuggestions}>Try again</QuietButton>
                 </p>
@@ -356,7 +364,7 @@ export function IntakeCompanionPage() {
                 {suggestions.length === 0 ? 'What I could place' : 'Here’s what I heard'}
               </h2>
 
-              <p className="text-small text-ink-muted mt-2 max-w-measure text-pretty">
+              <p className="text-small text-ink-muted max-w-measure mt-2 text-pretty">
                 Nothing has been saved yet. Keep what is right, or answer the questions yourself —
                 either way, you decide.
               </p>
@@ -392,9 +400,7 @@ export function IntakeCompanionPage() {
 
               <div className="mt-8 flex flex-col items-start gap-4">
                 <ButtonLink to={intakePath('support')}>
-                  {keptCount > 0
-                    ? 'Continue with these'
-                    : 'Answer the questions yourself'}
+                  {keptCount > 0 ? 'Continue with these' : 'Answer the questions yourself'}
                 </ButtonLink>
                 <QuietButton onClick={startOver}>Clear this conversation</QuietButton>
               </div>
@@ -410,7 +416,7 @@ export function IntakeCompanionPage() {
           */}
           <div className="border-line mt-10 border-t pt-7">
             <h2 className="text-label text-ink-muted uppercase">Or go straight to the questions</h2>
-            <p className="text-small text-ink-muted mt-2 max-w-measure text-pretty">
+            <p className="text-small text-ink-muted max-w-measure mt-2 text-pretty">
               Seven short questions, one at a time. Anything the assistant suggested is already
               filled in — you can change any of it.
             </p>
@@ -461,9 +467,9 @@ function EndedNote({ onContinue }: { readonly onContinue: () => void }) {
   return (
     <div className="border-line border-t py-7">
       <h2 className="text-label text-ink-muted uppercase">Where you can go from here</h2>
-      <p className="text-body text-ink mt-3 max-w-measure text-pretty">
-        A person is the right thing here, not an assistant. The questions below will still get
-        you to the same place.
+      <p className="text-body text-ink max-w-measure mt-3 text-pretty">
+        A person is the right thing here, not an assistant. The questions below will still get you
+        to the same place.
       </p>
       <p className="mt-4">
         <Button onClick={onContinue}>Continue to the questions</Button>
@@ -503,16 +509,16 @@ function UnplacedNotes({
     <div className={cx('text-small text-ink-faint', className)}>
       {notUnderstood.length > 0 && (
         <p className="text-pretty">
-          I couldn’t place {listOf(notUnderstood.map((entry) => nameOf(entry.key)))}, so I’ve
-          left it out rather than guess. It will still be in what you wrote.
+          I couldn’t place {listOf(notUnderstood.map((entry) => nameOf(entry.key)))}, so I’ve left
+          it out rather than guess. It will still be in what you wrote.
         </p>
       )}
 
       {surplus.length > 0 && (
         <p className="mt-2 text-pretty">
           There {surplus.length === 1 ? 'was' : 'were'} more thing
-          {surplus.length === 1 ? '' : 's'} I picked up that {surplus.length === 1 ? 'does' : 'do'}n’t
-          fit here. The questions cover the rest.
+          {surplus.length === 1 ? '' : 's'} I picked up that {surplus.length === 1 ? 'does' : 'do'}
+          n’t fit here. The questions cover the rest.
         </p>
       )}
     </div>
@@ -536,9 +542,9 @@ function AvailabilityHints({
   return (
     <div className="mt-6">
       <h3 className="text-label text-ink-muted uppercase">Times you mentioned</h3>
-      <p className="text-small text-ink-muted mt-2 max-w-measure text-pretty">
-        Offered as a starting point. The times question will still ask, and whatever you keep
-        here can be changed there.
+      <p className="text-small text-ink-muted max-w-measure mt-2 text-pretty">
+        Offered as a starting point. The times question will still ask, and whatever you keep here
+        can be changed there.
       </p>
       <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
         {suggestions.map((suggestion) => (
@@ -554,6 +560,17 @@ function AvailabilityHints({
     </div>
   );
 }
+
+/**
+ * What the assistant says when the conversation opens.
+ *
+ * The only thing this product says before a person has typed anything, and it is the line
+ * that has to carry the product's whole argument: nobody has to know the vocabulary before
+ * they can begin. The mock's own greeting says the same thing, so switching to a real model
+ * changes nothing a person would notice on arrival.
+ */
+const GREETING =
+  'You don’t need to know what kind of therapy you need, or any of the words therapists use for it. Tell me in your own words what has been going on.';
 
 /**
  * The guard's replies that end the conversation rather than redirect.

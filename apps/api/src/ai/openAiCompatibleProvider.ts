@@ -338,9 +338,8 @@ export function createOpenAiCompatibleProvider(
         // a stray "Assistant:" in the middle of one is a copy defect a human would have to
         // notice and fix.
         reply: reply.replace(/^\s*(assistant|reply)\s*:\s*/i, '').trim(),
-        readyToSummarise: /\b(here is what i|here's what i|i have understood|does that sound right)\b/i.test(
-          reply,
-        ),
+        readyToSummarise:
+          /\b(here is what i|here's what i|i have understood|does that sound right)\b/i.test(reply),
       };
     },
 
@@ -359,8 +358,17 @@ export function createOpenAiCompatibleProvider(
 
     async summariseCase(context: AiCaseContext): Promise<AiCaseSummary> {
       const parsed = parseJson(
-        await callModel(config, `${SYSTEM_INSTRUCTIONS}\n\n${CASE_INSTRUCTION}`, renderCase(context), true),
-      ) as { readonly summary?: unknown; readonly observations?: unknown; readonly tradeoffs?: unknown };
+        await callModel(
+          config,
+          `${SYSTEM_INSTRUCTIONS}\n\n${CASE_INSTRUCTION}`,
+          renderCase(context),
+          true,
+        ),
+      ) as {
+        readonly summary?: unknown;
+        readonly observations?: unknown;
+        readonly tradeoffs?: unknown;
+      };
 
       // The shape is checked here rather than trusted: a string where an array was asked
       // for would otherwise reach `.slice()` and throw a `TypeError` from inside a route.
@@ -374,7 +382,9 @@ export function createOpenAiCompatibleProvider(
 }
 
 function stringArray(value: unknown): readonly string[] {
-  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string')
+    : [];
 }
 
 /**
@@ -402,7 +412,12 @@ function renderCase(context: AiCaseContext): string {
       ? 'Evidence: (none recorded)'
       : `Evidence:\n${context.suggestion.reasons.map((reason) => `- ${reason}`).join('\n')}`,
   );
-  lines.push(describeGaps('Terms they asked for that this candidate does not carry', context.suggestion.notOffered));
+  lines.push(
+    describeGaps(
+      'Terms they asked for that this candidate does not carry',
+      context.suggestion.notOffered,
+    ),
+  );
 
   lines.push('');
   lines.push('OTHER CANDIDATES THE ENGINE CONSIDERED');
@@ -438,9 +453,7 @@ function describeGaps(
     return `${label}: none`;
   }
 
-  return `${label}:\n${gaps
-    .map((gap) => `- ${gap.category}: ${gap.names.join(', ')}`)
-    .join('\n')}`;
+  return `${label}:\n${gaps.map((gap) => `- ${gap.category}: ${gap.names.join(', ')}`).join('\n')}`;
 }
 
 /** Re-exported so the route can validate the one key that is not a vocabulary key. */

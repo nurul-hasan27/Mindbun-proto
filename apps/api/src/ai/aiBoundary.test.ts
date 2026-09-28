@@ -1,7 +1,6 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AiProvider } from './aiProvider.js';
 import { SIGNAL_CATEGORIES } from './aiProvider.js';
 
 /**
@@ -59,17 +58,6 @@ function read(path: string): string {
     .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
 }
 
-/** Read the file as it is on disk, comments and all. */
-function readWithComments(path: string): string {
-  return readFileSync(path, 'utf8');
-}
-
-function offenders(pattern: RegExp): readonly string[] {
-  return AI_FILES.filter((path) => pattern.test(read(path))).map((path) =>
-    relative(SOURCE, path),
-  );
-}
-
 describe('the AI layer can be found', () => {
   it('has files, so an empty set cannot pass every assertion below', () => {
     // A renamed directory or a broken glob would turn all of this into a vacuous truth,
@@ -119,7 +107,8 @@ describe('a provider cannot decide anything', () => {
     // the *shape* of a case — a value type, no behaviour — and that is how a summary can be
     // built from stored evidence at all. What must not cross is a repository, a service, or
     // the engine, because those are the doors to eligibility, ordering and selection.
-    const STORE = /matchRepository|workspaceRepository|workspaceService|matchEngine|matchService|feedbackService|intakeRepository|prismaIntakeRepository/;
+    const STORE =
+      /matchRepository|workspaceRepository|workspaceService|matchEngine|matchService|feedbackService|intakeRepository|prismaIntakeRepository/;
 
     for (const path of AI_FILES) {
       const source = read(path);
@@ -275,7 +264,9 @@ describe('the vocabulary is the authority', () => {
     // The one hard-coded key allowed in this layer, and it is not a vocabulary key: it is
     // the flag the intake already has a column for. Named explicitly so the exception is
     // visible.
-    const keys = [...validator.matchAll(/'(\w[\w-]*)'\s*[:,)]/g)].map((match) => match[1]);
+    const keys = [...validator.matchAll(/'(\w[\w-]*)'\s*[:,)]/g)]
+      .map((match) => match[1])
+      .filter((key): key is string => key !== undefined);
     const vocabularyShaped = keys.filter(
       (key) =>
         key.includes('-') &&
@@ -285,8 +276,10 @@ describe('the vocabulary is the authority', () => {
 
     // Keys that look like vocabulary terms but are written out here would be a second,
     // divergent copy of the taxonomy.
-    expect(vocabularyShaped, `hard-coded keys in the validator: ${vocabularyShaped.join(', ')}`)
-      .toEqual([]);
+    expect(
+      vocabularyShaped,
+      `hard-coded keys in the validator: ${vocabularyShaped.join(', ')}`,
+    ).toEqual([]);
   });
 });
 
@@ -304,6 +297,6 @@ describe('the real provider cannot log or echo the key', () => {
     const provider = read(join(AI_DIRECTORY, 'openAiCompatibleProvider.ts'));
 
     expect(provider).toContain('AbortController');
-    expect(provider).toContain("controller.abort()");
+    expect(provider).toContain('controller.abort()');
   });
 });

@@ -4,7 +4,7 @@ import { LoadingNote } from '../LoadingNote';
 import { QuietButton } from '../QuietButton';
 import { cx } from '../../lib/cx';
 import { fetchCaseSummary, type AiCaseSummary } from '../../lib/api/aiWorkspace';
-import { isApiError, toApiError, type ApiError } from '../../lib/api/errors';
+import { toApiError, type ApiError } from '../../lib/api/errors';
 
 /**
  * The AI perspective on a case.
@@ -64,9 +64,9 @@ export function CaseSummaryPanel({ matchId, className }: CaseSummaryPanelProps) 
     return (
       <div className={cx('border-line border-t pt-6', className)}>
         <h2 className="text-label text-ink-muted font-medium uppercase">AI perspective</h2>
-        <p className="text-small text-ink-muted mt-3 max-w-measure text-pretty">
-          A short read of this case, written from the evidence above. It cannot change anything
-          — it is a second reading, not a second opinion with authority.
+        <p className="text-small text-ink-muted max-w-measure mt-3 text-pretty">
+          A short read of this case, written from the evidence above. It cannot change anything — it
+          is a second reading, not a second opinion with authority.
         </p>
         <p className="mt-4">
           <Button variant="quiet" onClick={request}>
@@ -94,18 +94,15 @@ export function CaseSummaryPanel({ matchId, className }: CaseSummaryPanelProps) 
     return (
       <div className={cx('border-line border-t pt-6', className)}>
         <h2 className="text-label text-ink-muted font-medium uppercase">AI perspective</h2>
-        <p className="text-body text-ink mt-3 max-w-measure text-pretty" role="alert">
+        <p className="text-body text-ink max-w-measure mt-3 text-pretty" role="alert">
           {refusalSentence(state.error)}
         </p>
-        <p className="text-small text-ink-muted mt-2 max-w-measure text-pretty">
-          Everything above this line is unaffected. The case can be reviewed exactly as it
-          stands.
+        <p className="text-small text-ink-muted max-w-measure mt-2 text-pretty">
+          Everything above this line is unaffected. The case can be reviewed exactly as it stands.
         </p>
         <p className="mt-4 flex flex-wrap gap-x-5 gap-y-1">
           <QuietButton onClick={request}>Try again</QuietButton>
-          <QuietButton onClick={() => setState({ kind: 'unrequested' })}>
-            Leave it out
-          </QuietButton>
+          <QuietButton onClick={() => setState({ kind: 'unrequested' })}>Leave it out</QuietButton>
         </p>
       </div>
     );
@@ -129,7 +126,7 @@ function SummaryBody({
     <div className={cx('border-line border-t pt-6', className)}>
       <h2 className="text-label text-ink-muted font-medium uppercase">AI perspective</h2>
 
-      <p className="text-body text-ink mt-4 max-w-measure text-pretty">{prose}</p>
+      <p className="text-body text-ink max-w-measure mt-4 text-pretty">{prose}</p>
 
       {observations.length > 0 && (
         <section className="mt-8">
@@ -163,9 +160,9 @@ function SummaryBody({
       )}
 
       {tradeoffs.length === 0 && observations.length > 0 && (
-        <p className="text-small text-ink-faint mt-6 max-w-measure text-pretty">
-          No genuine tradeoffs stood out. Where two candidates meet the same conditions equally,
-          the evidence is the whole of the difference.
+        <p className="text-small text-ink-faint max-w-measure mt-6 text-pretty">
+          No genuine tradeoffs stood out. Where two candidates meet the same conditions equally, the
+          evidence is the whole of the difference.
         </p>
       )}
 
@@ -174,10 +171,10 @@ function SummaryBody({
         not have to read a warning to use a tool — but it has to be *somewhere*, because a
         summary that reads like a finding would otherwise be treated as one.
       */}
-      <p className="text-micro text-ink-faint mt-8 max-w-measure text-pretty">
-        Written from the stored evidence for this case and checked against it. Review the
-        evidence above before deciding — this cannot change scores, eligibility or the decision.
-        Written by {provider}.
+      <p className="text-micro text-ink-faint max-w-measure mt-8 text-pretty">
+        Written from the stored evidence for this case and checked against it. Review the evidence
+        above before deciding — this cannot change scores, eligibility or the decision. Written by{' '}
+        {provider}.
       </p>
 
       <p className="mt-4">

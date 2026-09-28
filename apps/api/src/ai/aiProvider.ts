@@ -200,13 +200,19 @@ export interface AiCaseContext {
     /** Sentences generated from stored evidence. The only reasons a provider may use. */
     readonly reasons: readonly string[];
     /** Terms the client named that this candidate does not carry. */
-    readonly notOffered: readonly { readonly category: string; readonly names: readonly string[] }[];
+    readonly notOffered: readonly {
+      readonly category: string;
+      readonly names: readonly string[];
+    }[];
   };
   /** The other candidates, with the same fields. */
   readonly alternatives: readonly {
     readonly name: string;
     readonly reasons: readonly string[];
-    readonly notOffered: readonly { readonly category: string; readonly names: readonly string[] }[];
+    readonly notOffered: readonly {
+      readonly category: string;
+      readonly names: readonly string[];
+    }[];
   }[];
   /**
    * The client's structured reasons for declining earlier passes, as labels.

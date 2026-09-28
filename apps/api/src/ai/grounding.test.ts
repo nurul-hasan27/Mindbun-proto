@@ -104,7 +104,7 @@ describe('a summary that invents something', () => {
       const result = assertGroundedIn(summary, CONTEXT);
 
       expect(result.ok).toBe(false);
-      expect(result.ok === false && result.reason).toMatch(/absent from the case/);
+      expect(!result.ok && result.reason).toMatch(/absent from the case/);
     });
   }
 
@@ -116,8 +116,8 @@ describe('a summary that invents something', () => {
 
     // As the model wrote them, so a developer swapping providers sees what it invented
     // rather than a lowercased approximation of it.
-    expect(result.ok === false && result.reason).toContain('Priya');
-    expect(result.ok === false && result.reason).toContain('EMDR');
+    expect(!result.ok && result.reason).toContain('Priya');
+    expect(!result.ok && result.reason).toContain('EMDR');
   });
 });
 
@@ -178,7 +178,7 @@ describe('register the product refuses', () => {
       const result = assertGroundedIn(summary, CONTEXT);
 
       expect(result.ok).toBe(false);
-      expect(result.ok === false && result.reason).toMatch(pattern);
+      expect(!result.ok && result.reason).toMatch(pattern);
     });
   }
 });
@@ -246,7 +246,7 @@ describe('a summary that says nothing', () => {
     const result = assertGroundedIn(ok({ observations: ['', '   '] }), CONTEXT);
 
     expect(result.ok).toBe(false);
-    expect(result.ok === false && result.reason).toMatch(/observations/);
+    expect(!result.ok && result.reason).toMatch(/observations/);
   });
 });
 
@@ -257,7 +257,8 @@ describe('the direction of the grounding check', () => {
     // words a summariser needs, and none of them can assert anything about anyone.
     const result = assertGroundedIn(
       ok({
-        summary: 'While they speak Hindi, they do not carry Exploratory, because that is what was asked for.',
+        summary:
+          'While they speak Hindi, they do not carry Exploratory, because that is what was asked for.',
         observations: ['Because they asked for Exploratory, it is worth looking at Dev Menon.'],
       }),
       CONTEXT,

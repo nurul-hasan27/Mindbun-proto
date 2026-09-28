@@ -1,7 +1,12 @@
 import { describe, expect, it, vi, type MockedFunction } from 'vitest';
 import { Writable } from 'node:stream';
 import { buildApp } from '../../../app.js';
-import { AiUnavailableError, type AiCaseContext, type AiProvider, type AiSignal } from '../../../ai/aiProvider.js';
+import {
+  AiUnavailableError,
+  type AiCaseContext,
+  type AiProvider,
+  type AiSignal,
+} from '../../../ai/aiProvider.js';
 import { buildCaseContext } from '../../../ai/caseContext.js';
 import type { IntakeRepository } from '../../../data/intake/intakeRepository.js';
 import type { IntakeVocabulary } from '../../../data/intake/intakeTypes.js';
@@ -47,44 +52,94 @@ function fakeIntakes(
   overrides: Partial<Record<keyof IntakeRepository, MockedFunction<never>>> = {},
 ): IntakeRepository {
   return {
-    readVocabulary: (overrides['readVocabulary'] ??
-      vi.fn(() => Promise.resolve(VOCABULARY))) as IntakeRepository['readVocabulary'],
+    readVocabulary: overrides.readVocabulary ?? vi.fn(() => Promise.resolve(VOCABULARY)),
     submit: vi.fn(() =>
-      Promise.resolve({ intakeId: '0199a1c2-3d4e-5f60-8712-93a4b5c6d7ea', receivedAt: '2026-09-28T12:00:00.000Z' }),
-    ) as IntakeRepository['submit'],
+      Promise.resolve({
+        intakeId: '0199a1c2-3d4e-5f60-8712-93a4b5c6d7ea',
+        receivedAt: '2026-09-28T12:00:00.000Z',
+      }),
+    ),
   };
 }
 
-/** A provider whose every method is a spy, so a test can assert on what was asked. */
-function fakeProvider(overrides: Partial<AiProvider> = {}): AiProvider & {
-  nextTurn: MockedFunction<AiProvider['nextTurn']>;
-  extractSignals: MockedFunction<AiProvider['extractSignals']>;
-  summariseCase: MockedFunction<AiProvider['summariseCase']>;
-} {
-  return {
-    name: 'test',
-    available: true,
-    nextTurn: vi.fn(() => Promise.resolve({ reply: 'Hello.', readyToSummarise: false })),
-    extractSignals: vi.fn(() => Promise.resolve([])),
-    summariseCase: vi.fn(() =>
-      Promise.resolve({
-        summary: 'They are looking for support around Work stress and Exploratory.',
-        observations: ['They speak Hindi.'],
-        tradeoffs: [],
-      }),
-    ),
-    ...overrides,
-  } as never;
+/**
+ * A provider whose every method is a spy, so a test can assert on what was asked.
+ *
+ * The spies come back as **named values** alongside the provider rather than being reached
+ * through the port. `expect(turn).toHaveBeenCalledWith(...)` says which call the test means;
+ * `expect(turn)` is a detour through an interface, and it reads as a method reference
+ * that could be called with the wrong `this`. This is the same shape the intake route's
+ * tests use for their repository.
+ */
+interface ProviderSpies {
+  readonly nextTurn: MockedFunction<AiProvider['nextTurn']>;
+  readonly extractSignals: MockedFunction<AiProvider['extractSignals']>;
+  readonly summariseCase: MockedFunction<AiProvider['summariseCase']>;
 }
 
-const TURN = { role: 'user', text: 'Work has been stressful and I would rather talk things through.' };
+interface FakeProvider {
+  readonly ai: AiProvider;
+  readonly turn: ProviderSpies['nextTurn'];
+  readonly extract: ProviderSpies['extractSignals'];
+  readonly summarise: ProviderSpies['summariseCase'];
+}
+
+const DEFAULT_TURN = { reply: 'Hello.', readyToSummarise: false };
+const DEFAULT_SUMMARY = {
+  summary: 'They are looking for support around Work stress and Exploratory.',
+  observations: ['They speak Hindi.'],
+  tradeoffs: [],
+} as const;
+
+function fakeProvider(overrides: Partial<AiProvider> = {}): FakeProvider {
+  const nextTurn = vi.fn(() => Promise.resolve(DEFAULT_TURN));
+  const extractSignals = vi.fn(() => Promise.resolve([]));
+  const summariseCase = vi.fn(() => Promise.resolve(DEFAULT_SUMMARY));
+
+  return {
+    ai: {
+      name: 'test',
+      available: true,
+      nextTurn,
+      extractSignals,
+      summariseCase,
+      ...overrides,
+    },
+    turn: nextTurn,
+    extract: extractSignals,
+    summarise: summariseCase,
+  };
+}
+
+const TURN = {
+  role: 'user',
+  text: 'Work has been stressful and I would rather talk things through.',
+};
+
+/**
+ * The context the provider was given.
+ *
+ * Throws rather than returning a possibly-undefined value, because every caller asserts
+ * something about it and an assertion about `undefined` would pass for the wrong reason.
+ */
+function firstContext(spy: MockedFunction<AiProvider['summariseCase']>): AiCaseContext {
+  const call = spy.mock.calls[0];
+
+  if (call === undefined) {
+    throw new Error('The provider was never asked to summarise a case.');
+  }
+
+  return call[0];
+}
 
 // ---------------------------------------------------------------------------
 
 describe('POST /api/v1/ai/intake/turn', () => {
   it('answers with one turn and names the provider', async () => {
-    const ai = fakeProvider({
-      nextTurn: vi.fn(() => Promise.resolve({ reply: 'What has been going on?', readyToSummarise: false })),
+    const { ai } = fakeProvider({
+      nextTurn: vi.fn(() =>
+        Promise.resolve({ reply: 'What has been going on?', readyToSummarise: false }),
+      ),
     });
     const app = buildApp({ aiProvider: ai, intakes: fakeIntakes() });
 
@@ -103,7 +158,7 @@ describe('POST /api/v1/ai/intake/turn', () => {
   });
 
   it('passes the transcript and what the intake already holds', async () => {
-    const ai = fakeProvider();
+    const { ai, turn } = fakeProvider();
     const app = buildApp({ aiProvider: ai, intakes: fakeIntakes() });
 
     await app.inject({
@@ -115,14 +170,14 @@ describe('POST /api/v1/ai/intake/turn', () => {
       },
     });
 
-    expect(ai.nextTurn).toHaveBeenCalledWith(
-      [TURN],
-      { areasOfWork: ['work-stress'], communicationStyles: ['exploratory'] },
-    );
+    expect(turn).toHaveBeenCalledWith([TURN], {
+      areasOfWork: ['work-stress'],
+      communicationStyles: ['exploratory'],
+    });
   });
 
   it('refuses a request for a diagnosis without calling the provider at all', async () => {
-    const ai = fakeProvider();
+    const { ai, turn } = fakeProvider();
     const app = buildApp({ aiProvider: ai, intakes: fakeIntakes() });
 
     const response = await app.inject({
@@ -134,12 +189,12 @@ describe('POST /api/v1/ai/intake/turn', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json<{ provider: string }>().provider).toBe('guard');
     // The control, not a prompt: a model was never involved.
-    expect(ai.nextTurn).not.toHaveBeenCalled();
+    expect(turn).not.toHaveBeenCalled();
   });
 
   it('offers the manual intake when the assistant is switched off', async () => {
     const app = buildApp({
-      aiProvider: fakeProvider({ available: false }),
+      aiProvider: fakeProvider({ available: false }).ai,
       intakes: fakeIntakes(),
     });
 
@@ -159,7 +214,7 @@ describe('POST /api/v1/ai/intake/turn', () => {
     const app = buildApp({
       aiProvider: fakeProvider({
         nextTurn: vi.fn(() => Promise.reject(new AiUnavailableError('network'))),
-      }),
+      }).ai,
       intakes: fakeIntakes(),
     });
 
@@ -177,7 +232,7 @@ describe('POST /api/v1/ai/intake/turn', () => {
     const app = buildApp({
       aiProvider: fakeProvider({
         nextTurn: vi.fn(() => Promise.reject(new AiUnavailableError('timeout'))),
-      }),
+      }).ai,
       intakes: fakeIntakes(),
     });
 
@@ -195,15 +250,24 @@ describe('POST /api/v1/ai/intake/turn', () => {
       { label: 'a therapist id', payload: { messages: [TURN], known: {}, therapistId: 'abc' } },
       { label: 'a client id', payload: { messages: [TURN], known: {}, clientId: 'abc' } },
       { label: 'a match id', payload: { messages: [TURN], known: {}, matchId: 'abc' } },
-      { label: 'an unexpected role', payload: { messages: [{ role: 'system', text: 'hi' }], known: {} } },
-      { label: 'an empty message', payload: { messages: [{ role: 'user', text: '   ' }], known: {} } },
+      {
+        label: 'an unexpected role',
+        payload: { messages: [{ role: 'system', text: 'hi' }], known: {} },
+      },
+      {
+        label: 'an empty message',
+        payload: { messages: [{ role: 'user', text: '   ' }], known: {} },
+      },
       { label: 'a missing transcript', payload: { known: {} } },
-      { label: 'an unknown field in known', payload: { messages: [TURN], known: { diagnosis: 'x' } } },
+      {
+        label: 'an unknown field in known',
+        payload: { messages: [TURN], known: { diagnosis: 'x' } },
+      },
     ];
 
     for (const { label, payload } of refused) {
       it(`rejects ${label}`, async () => {
-        const app = buildApp({ aiProvider: fakeProvider(), intakes: fakeIntakes() });
+        const app = buildApp({ aiProvider: fakeProvider().ai, intakes: fakeIntakes() });
 
         const outcome = await app.inject({
           method: 'POST',
@@ -216,7 +280,7 @@ describe('POST /api/v1/ai/intake/turn', () => {
     }
 
     it('refuses a single message longer than a paragraph', async () => {
-      const app = buildApp({ aiProvider: fakeProvider(), intakes: fakeIntakes() });
+      const app = buildApp({ aiProvider: fakeProvider().ai, intakes: fakeIntakes() });
 
       const response = await app.inject({
         method: 'POST',
@@ -228,7 +292,7 @@ describe('POST /api/v1/ai/intake/turn', () => {
     });
 
     it('refuses a transcript long enough to be a denial of service', async () => {
-      const app = buildApp({ aiProvider: fakeProvider(), intakes: fakeIntakes() });
+      const app = buildApp({ aiProvider: fakeProvider().ai, intakes: fakeIntakes() });
 
       const response = await app.inject({
         method: 'POST',
@@ -257,7 +321,7 @@ describe('POST /api/v1/ai/intake/extract', () => {
   });
 
   it('returns only keys the vocabulary actually holds', async () => {
-    const ai = fakeProvider({
+    const { ai } = fakeProvider({
       extractSignals: vi.fn(() =>
         Promise.resolve([
           signal(),
@@ -289,7 +353,10 @@ describe('POST /api/v1/ai/intake/extract', () => {
     });
     // Reported, not swallowed. "integrative" is in the approaches table but has no question
     // on the intake, and `invented-term` is nowhere at all.
-    expect(body.notUnderstood.map((entry) => entry.key).sort()).toEqual(['integrative', 'invented-term']);
+    expect(body.notUnderstood.map((entry) => entry.key).sort()).toEqual([
+      'integrative',
+      'invented-term',
+    ]);
     expect(body.surplus).toEqual([]);
   });
 
@@ -297,7 +364,7 @@ describe('POST /api/v1/ai/intake/extract', () => {
     const app = buildApp({
       aiProvider: fakeProvider({
         extractSignals: vi.fn(() => Promise.resolve('not a list' as never)),
-      }),
+      }).ai,
       intakes: fakeIntakes(),
     });
 
@@ -314,10 +381,8 @@ describe('POST /api/v1/ai/intake/extract', () => {
   it('survives a provider returning a huge response', async () => {
     const app = buildApp({
       aiProvider: fakeProvider({
-        extractSignals: vi.fn(() =>
-          Promise.resolve(Array.from({ length: 5_000 }, () => signal())),
-        ),
-      }),
+        extractSignals: vi.fn(() => Promise.resolve(Array.from({ length: 5_000 }, () => signal()))),
+      }).ai,
       intakes: fakeIntakes(),
     });
 
@@ -332,7 +397,7 @@ describe('POST /api/v1/ai/intake/extract', () => {
   });
 
   it('will not summarise a conversation where a request for care was refused', async () => {
-    const ai = fakeProvider();
+    const { ai, extract } = fakeProvider();
     const app = buildApp({ aiProvider: ai, intakes: fakeIntakes() });
 
     const response = await app.inject({
@@ -343,11 +408,11 @@ describe('POST /api/v1/ai/intake/extract', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json<{ signals: unknown[] }>().signals).toEqual([]);
-    expect(ai.extractSignals).not.toHaveBeenCalled();
+    expect(extract).not.toHaveBeenCalled();
   });
 
   it('refuses to summarise an empty conversation', async () => {
-    const ai = fakeProvider();
+    const { ai, extract } = fakeProvider();
     const app = buildApp({ aiProvider: ai, intakes: fakeIntakes() });
 
     const response = await app.inject({
@@ -357,12 +422,12 @@ describe('POST /api/v1/ai/intake/extract', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(ai.extractSignals).not.toHaveBeenCalled();
+    expect(extract).not.toHaveBeenCalled();
   });
 
   it('reports an unreachable store as 503, and says so without blaming the model', async () => {
     const app = buildApp({
-      aiProvider: fakeProvider(),
+      aiProvider: fakeProvider().ai,
       intakes: fakeIntakes({
         readVocabulary: vi.fn(() => Promise.reject(new DataStoreUnavailableError('down'))) as never,
       }),
@@ -381,7 +446,7 @@ describe('POST /api/v1/ai/intake/extract', () => {
   });
 
   it('never lets a caller supply vocabulary keys of their own', async () => {
-    const ai = fakeProvider();
+    const { ai, extract } = fakeProvider();
     const app = buildApp({ aiProvider: ai, intakes: fakeIntakes() });
 
     const response = await app.inject({
@@ -391,7 +456,7 @@ describe('POST /api/v1/ai/intake/extract', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(ai.extractSignals).not.toHaveBeenCalled();
+    expect(extract).not.toHaveBeenCalled();
   });
 });
 
@@ -400,9 +465,22 @@ describe('POST /api/v1/ai/intake/extract', () => {
 /** A case, as `findCase` returns it. */
 function fakeCase(): CaseDetail {
   const therapist = (id: string, displayName: string) =>
-    ({ id, displayName, headline: '', location: '', timezone: '', yearsOfExperience: 5,
-       languages: [], areasOfWork: [], communicationStyles: [], bio: '', approaches: [],
-       contextualExperience: [], sessionFormats: [], availability: [] }) as never;
+    ({
+      id,
+      displayName,
+      headline: '',
+      location: '',
+      timezone: '',
+      yearsOfExperience: 5,
+      languages: [],
+      areasOfWork: [],
+      communicationStyles: [],
+      bio: '',
+      approaches: [],
+      contextualExperience: [],
+      sessionFormats: [],
+      availability: [],
+    }) as never;
 
   return {
     summary: {
@@ -538,7 +616,7 @@ describe('GET /api/v1/matching-workspace/cases/:matchId/ai-summary', () => {
   }
 
   it('sends the provider structured data and nothing else', async () => {
-    const ai = fakeProvider();
+    const { ai, summarise } = fakeProvider();
     const { app } = workspaceApp(ai);
 
     const response = await app.inject({
@@ -549,7 +627,8 @@ describe('GET /api/v1/matching-workspace/cases/:matchId/ai-summary', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json<{ provider: string }>().provider).toBe('test');
 
-    const context = ai.summariseCase.mock.calls[0]?.[0] as AiCaseContext;
+    const context = firstContext(summarise);
+
     expect(context.needs.map((need) => need.label)).toEqual(
       expect.arrayContaining(['Work stress', 'Exploratory', 'Hindi']),
     );
@@ -561,7 +640,7 @@ describe('GET /api/v1/matching-workspace/cases/:matchId/ai-summary', () => {
   });
 
   it('never loads the client’s own words to build a summary', async () => {
-    const ai = fakeProvider();
+    const { ai } = fakeProvider();
     const { app, workspace } = workspaceApp(ai);
 
     await app.inject({
@@ -575,7 +654,7 @@ describe('GET /api/v1/matching-workspace/cases/:matchId/ai-summary', () => {
   });
 
   it('leaves the case out of the provider input entirely', async () => {
-    const ai = fakeProvider();
+    const { ai, summarise } = fakeProvider();
     const { app } = workspaceApp(ai);
 
     await app.inject({
@@ -583,7 +662,7 @@ describe('GET /api/v1/matching-workspace/cases/:matchId/ai-summary', () => {
       url: `/api/v1/matching-workspace/cases/${CASE_ID}/ai-summary`,
     });
 
-    const context = JSON.stringify(ai.summariseCase.mock.calls[0]?.[0] ?? {});
+    const context = JSON.stringify(firstContext(summarise));
 
     // Serialised, so a field added later and missed by a type-level check would still show.
     expect(context).not.toContain('secret words');
@@ -592,7 +671,7 @@ describe('GET /api/v1/matching-workspace/cases/:matchId/ai-summary', () => {
   });
 
   it('refuses a summary that claims something the case does not contain', async () => {
-    const ai = fakeProvider({
+    const { ai } = fakeProvider({
       summariseCase: vi.fn(() =>
         Promise.resolve({
           summary: 'Priya Sharma is the best match for this client.',
@@ -614,7 +693,7 @@ describe('GET /api/v1/matching-workspace/cases/:matchId/ai-summary', () => {
   });
 
   it('never returns a refused summary, even partially', async () => {
-    const ai = fakeProvider({
+    const { ai } = fakeProvider({
       summariseCase: vi.fn(() =>
         Promise.resolve({
           summary: 'Ananya Rao speaks Hindi.',
@@ -637,7 +716,7 @@ describe('GET /api/v1/matching-workspace/cases/:matchId/ai-summary', () => {
   });
 
   it('reports a provider failure without an excuse', async () => {
-    const ai = fakeProvider({
+    const { ai } = fakeProvider({
       summariseCase: vi.fn(() => Promise.reject(new AiUnavailableError('timeout'))),
     });
     const { app } = workspaceApp(ai);
@@ -652,7 +731,7 @@ describe('GET /api/v1/matching-workspace/cases/:matchId/ai-summary', () => {
   });
 
   it('rejects a reference that is not a case', async () => {
-    const ai = fakeProvider();
+    const { ai, summarise } = fakeProvider();
     const { app } = workspaceApp(ai);
 
     const response = await app.inject({
@@ -661,11 +740,11 @@ describe('GET /api/v1/matching-workspace/cases/:matchId/ai-summary', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(ai.summariseCase).not.toHaveBeenCalled();
+    expect(summarise).not.toHaveBeenCalled();
   });
 
   it('answers 404 for a case that does not exist', async () => {
-    const ai = fakeProvider();
+    const { ai } = fakeProvider();
     const app = buildApp({
       aiProvider: ai,
       workspace: {
@@ -684,7 +763,7 @@ describe('GET /api/v1/matching-workspace/cases/:matchId/ai-summary', () => {
   });
 
   it('offers the evidence alone when the assistant is switched off', async () => {
-    const ai = fakeProvider({ available: false });
+    const { ai } = fakeProvider({ available: false });
     const { app } = workspaceApp(ai);
 
     const response = await app.inject({
@@ -697,7 +776,7 @@ describe('GET /api/v1/matching-workspace/cases/:matchId/ai-summary', () => {
   });
 
   it('ignores a body, because there is no schema for one to satisfy', async () => {
-    const ai = fakeProvider();
+    const { ai, summarise } = fakeProvider();
     const { app } = workspaceApp(ai);
 
     // Fastify does not parse a body for a route that declares none, so this cannot steer
@@ -710,10 +789,9 @@ describe('GET /api/v1/matching-workspace/cases/:matchId/ai-summary', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(ai.summariseCase).toHaveBeenCalledOnce();
+    expect(summarise).toHaveBeenCalledOnce();
     // The only thing that reached the provider came from the path parameter and the store.
-    const context = JSON.stringify(ai.summariseCase.mock.calls[0]?.[0] ?? {});
-    expect(context).not.toContain('someone-else');
+    expect(JSON.stringify(firstContext(summarise))).not.toContain('someone-else');
   });
 });
 
@@ -741,7 +819,7 @@ describe('privacy', () => {
       // A failure, because that is the path that logs something.
       aiProvider: fakeProvider({
         nextTurn: vi.fn(() => Promise.reject(new AiUnavailableError('network'))),
-      }),
+      }).ai,
       intakes: fakeIntakes(),
       logger: { level: 'warn', stream: logs.stream },
     });
@@ -762,7 +840,7 @@ describe('privacy', () => {
   it('does not put a rejected body into a log line either', async () => {
     const logs = captureLogs();
     const app = buildApp({
-      aiProvider: fakeProvider(),
+      aiProvider: fakeProvider().ai,
       intakes: fakeIntakes(),
       logger: { level: 'warn', stream: logs.stream },
     });
@@ -785,7 +863,7 @@ describe('privacy', () => {
     const app = buildApp({
       aiProvider: fakeProvider({
         nextTurn: vi.fn(() => Promise.reject(new AiUnavailableError('network'))),
-      }),
+      }).ai,
       intakes: fakeIntakes(),
     });
 
@@ -800,7 +878,7 @@ describe('privacy', () => {
   });
 
   it('keeps the assistant off every client-facing schema', async () => {
-    const app = buildApp({ aiProvider: fakeProvider(), intakes: fakeIntakes() });
+    const app = buildApp({ aiProvider: fakeProvider().ai, intakes: fakeIntakes() });
 
     const response = await app.inject({
       method: 'POST',
@@ -822,8 +900,15 @@ describe('buildCaseContext', () => {
     const withJourney = {
       ...detail,
       journey: [
-        { attempt: 1, matchId: CASE_ID, systemSuggestedName: 'Someone Else',
-          clientFeedback: ['NOT_RIGHT_FIT'], decision: null, selectedName: null, status: 'DECLINED' },
+        {
+          attempt: 1,
+          matchId: CASE_ID,
+          systemSuggestedName: 'Someone Else',
+          clientFeedback: ['NOT_RIGHT_FIT'],
+          decision: null,
+          selectedName: null,
+          status: 'DECLINED',
+        },
       ],
       decisionReasons: [{ key: 'NOT_RIGHT_FIT', name: 'Not the right fit', description: '' }],
     } as unknown as CaseDetail;
@@ -838,10 +923,22 @@ describe('buildCaseContext', () => {
     const withIneligible = {
       ...detail,
       alternatives: [
-        { matchId: 'a', therapist: detail.suggestion.therapist, eligible: true, rejectionCode: null,
-          shared: [], notOffered: [] },
-        { matchId: 'b', therapist: detail.suggestion.therapist, eligible: false,
-          rejectionCode: 'NO_SHARED_LANGUAGE', shared: [], notOffered: [] },
+        {
+          matchId: 'a',
+          therapist: detail.suggestion.therapist,
+          eligible: true,
+          rejectionCode: null,
+          shared: [],
+          notOffered: [],
+        },
+        {
+          matchId: 'b',
+          therapist: detail.suggestion.therapist,
+          eligible: false,
+          rejectionCode: 'NO_SHARED_LANGUAGE',
+          shared: [],
+          notOffered: [],
+        },
       ],
     } as unknown as CaseDetail;
 

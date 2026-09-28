@@ -52,19 +52,15 @@ export function buildAiProvider(config: AiConfig, readVocabulary: ReadVocabulary
  * the same way a real provider refuses, so the interface's failure path is the one it would
  * have taken anyway.
  */
-export function createUnavailableAiProvider(message = 'The assistant is not available.'): AiProvider {
+export function createUnavailableAiProvider(): AiProvider {
   // A *real* `AiUnavailableError`, not an `Error` with that name. The route narrows on
   // `instanceof`, so a look-alike would answer a 500 and tell a person the service is
   // broken, when what has actually happened is that the assistant is switched off.
   //
-  // **Rejected, not thrown.** An `async` function whose body throws returns a rejected
-  // promise; a plain one throws synchronously. Both are caught by `await` in a try block,
-  // but only a rejection survives a caller that attaches a `.catch()`, and a port whose
-  // methods can throw synchronously is a trap for whoever wires the next one up.
-  const refuse = async (): Promise<never> => {
-    void message;
-    throw new AiUnavailableError('unconfigured');
-  };
+  // **Rejected, not thrown.** A `Promise.reject` survives a caller that attaches a
+  // `.catch()`; a synchronous throw from an `async` function's replacement would not, and a
+  // port whose methods can throw synchronously is a trap for whoever wires the next one up.
+  const refuse = (): Promise<never> => Promise.reject(new AiUnavailableError('unconfigured'));
 
   return {
     name: 'unavailable',

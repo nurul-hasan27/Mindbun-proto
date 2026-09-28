@@ -120,7 +120,15 @@ export const MAX_EXPLANATION_LENGTH = 240;
  * about where a suggestion lands.
  */
 export const CATEGORY_FAMILY: Readonly<
-  Record<AiSignalCategory, 'areasOfWork' | 'communicationStyles' | 'contextualExperience' | 'languages' | 'sessionFormats' | null>
+  Record<
+    AiSignalCategory,
+    | 'areasOfWork'
+    | 'communicationStyles'
+    | 'contextualExperience'
+    | 'languages'
+    | 'sessionFormats'
+    | null
+  >
 > = {
   area: 'areasOfWork',
   // An alias, not a second destination. See the note at the top of this file.
@@ -142,7 +150,9 @@ export const CATEGORY_FAMILY: Readonly<
  * two ever diverge further the mistake would ship silently. This table is the whole
  * translation, so there is exactly one place to be wrong.
  */
-const FAMILY_DRAFT_FIELD: Readonly<Record<Exclude<keyof IntakeVocabularyView, 'never'>, DraftField>> = {
+const FAMILY_DRAFT_FIELD: Readonly<
+  Record<Exclude<keyof IntakeVocabularyView, 'never'>, DraftField>
+> = {
   areasOfWork: 'areasOfWork',
   communicationStyles: 'communicationStyles',
   contextualExperience: 'contextualExperiences',
@@ -270,7 +280,9 @@ export function resolveTarget(
 
     const when =
       hint.days.length === 0
-        ? (hint.part === null ? '' : prettyPart(hint.part))
+        ? hint.part === null
+          ? ''
+          : prettyPart(hint.part)
         : hint.part === null
           ? prettyDays(hint.days)
           : `${prettyDays(hint.days)} ${prettyPart(hint.part).toLowerCase()}`;
@@ -348,10 +360,7 @@ function readString(value: unknown): string | null {
  * cast to `AiSignal` happens once, at the bottom, and only after every field has been
  * individually verified against the vocabulary above.
  */
-export function validateSignals(
-  raw: unknown,
-  vocabulary: IntakeVocabularyView,
-): SignalValidation {
+export function validateSignals(raw: unknown, vocabulary: IntakeVocabularyView): SignalValidation {
   if (!Array.isArray(raw)) {
     return { signals: [], notUnderstood: [], surplus: [] };
   }

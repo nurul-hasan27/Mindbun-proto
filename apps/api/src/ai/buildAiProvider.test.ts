@@ -112,7 +112,7 @@ describe('readServerConfig, AI section', () => {
 });
 
 describe('buildAiProvider', () => {
-  it('builds the mock for the mock configuration', async () => {
+  it('builds the mock for the mock configuration', () => {
     const provider = buildAiProvider(CONFIG, readVocabulary);
 
     expect(provider.name).toBe('mock');

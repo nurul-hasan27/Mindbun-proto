@@ -82,7 +82,9 @@ describe('what the client journey can reach', () => {
 
     const importers = clientJourneyFiles.filter((path) =>
       WORKSPACE_CLIENTS.some((name) =>
-        new RegExp(`import[^;]*from\\s+'[^']*(\\/|^)${name}(\\.ts)?'`).test(readFileSync(path, 'utf8')),
+        new RegExp(`import[^;]*from\\s+'[^']*(\\/|^)${name}(\\.ts)?'`).test(
+          readFileSync(path, 'utf8'),
+        ),
       ),
     );
 

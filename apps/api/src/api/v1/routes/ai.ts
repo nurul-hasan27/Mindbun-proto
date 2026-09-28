@@ -78,7 +78,9 @@ function badRequest(message: string): ErrorResponse {
  * sentence. **The messages are not included in any error**, because the error goes into a
  * log line, and the log line is where a person's own words must not be.
  */
-function readTranscript(raw: unknown): { ok: true; messages: readonly AiMessage[] } | { ok: false; message: string } {
+function readTranscript(
+  raw: unknown,
+): { ok: true; messages: readonly AiMessage[] } | { ok: false; message: string } {
   if (!Array.isArray(raw)) {
     return { ok: false, message: 'The conversation could not be read.' };
   }
@@ -144,7 +146,10 @@ export function buildAiRoutes({ ai, intakes }: AiRouteDeps): FastifyPluginCallba
 
   /** 503 when the assistant is switched off, 502 when it failed. Different sentences. */
   function failure(
-    log: { warn: (payload: unknown, message?: string) => void; error: (payload: unknown, message?: string) => void },
+    log: {
+      warn: (payload: unknown, message?: string) => void;
+      error: (payload: unknown, message?: string) => void;
+    },
     reply: FastifyReply,
     error: unknown,
   ): FastifyReply {
@@ -168,7 +173,10 @@ export function buildAiRoutes({ ai, intakes }: AiRouteDeps): FastifyPluginCallba
       });
     }
 
-    log.error({ err: { name: error instanceof Error ? error.name : 'unknown' } }, 'ai route failure');
+    log.error(
+      { err: { name: error instanceof Error ? error.name : 'unknown' } },
+      'ai route failure',
+    );
     return reply.status(500).send({
       statusCode: 500,
       error: 'Internal Server Error',
@@ -230,7 +238,7 @@ export function buildAiRoutes({ ai, intakes }: AiRouteDeps): FastifyPluginCallba
             provider: ai.name,
           };
 
-          return reply.send(response);
+          return await reply.send(response);
         } catch (error) {
           return failure(request.log, reply, error);
         }
@@ -268,9 +276,9 @@ export function buildAiRoutes({ ai, intakes }: AiRouteDeps): FastifyPluginCallba
         }
 
         if (transcript.messages.every((message) => message.role === 'assistant')) {
-          return reply.status(400).send(
-            badRequest('There is nothing to read yet — tell the assistant something first.'),
-          );
+          return reply
+            .status(400)
+            .send(badRequest('There is nothing to read yet — tell the assistant something first.'));
         }
 
         const guarded = guardTurn(transcript.messages);
@@ -300,7 +308,7 @@ export function buildAiRoutes({ ai, intakes }: AiRouteDeps): FastifyPluginCallba
             provider: ai.name,
           };
 
-          return reply.send(response);
+          return await reply.send(response);
         } catch (error) {
           return failure(request.log, reply, error);
         }
