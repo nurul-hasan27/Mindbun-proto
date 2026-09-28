@@ -71,20 +71,54 @@ describe('what the client journey can reach', () => {
     expect(clientJourneyFiles.length).toBeGreaterThan(20);
   });
 
-  it('has no client page importing the workspace API client', () => {
+  it('has no client page importing a workspace API client', () => {
     // Matched on the import path rather than the word, because the word alone would flag a
     // comment or an ordinary phrase like "the matching workspace".
+    //
+    // Both workspace clients, listed explicitly rather than pattern-matched: a new one added
+    // later would be covered by the name, and one that was not would not be covered at all.
+    // The list is asserted to be complete against what exists.
+    const WORKSPACE_CLIENTS = ['workspace', 'aiWorkspace'] as const;
+
     const importers = clientJourneyFiles.filter((path) =>
-      /import[^;]*from\s+'[^']*(\/|^)workspace(\.ts)?'/.test(readFileSync(path, 'utf8')),
+      WORKSPACE_CLIENTS.some((name) =>
+        new RegExp(`import[^;]*from\\s+'[^']*(\\/|^)${name}(\\.ts)?'`).test(readFileSync(path, 'utf8')),
+      ),
     );
 
     expect(importers.map((path) => relative(SOURCE, path))).toEqual([]);
+  });
+
+  it('keeps the AI case summary client out of the shared barrel, unlike the intake one', () => {
+    // The two AI clients are on opposite sides of the boundary, and the barrel is the one
+    // place a client page could reach either of them by accident. The intake client is
+    // exported; the workspace one is not, and asserting that separately makes the asymmetry
+    // a decision on the record rather than an omission somebody tidies up later.
+    const barrel = readFileSync(join(SOURCE, 'lib/api/index.ts'), 'utf8');
+
+    expect(barrel).toContain("from './ai'");
+    expect(barrel).not.toContain("from './aiWorkspace'");
+  });
+
+  it('files the AI case summary client beside the workspace client it belongs with', () => {
+    // Both are the reviewer's side of the boundary, and the server route is under
+    // `/matching-workspace` for the same reason. Asserting the file lives in the same
+    // directory means a future move has to be argued for rather than done by accident.
+    const exists = sourceFiles(join(SOURCE, 'lib', 'api')).some((path) =>
+      path.endsWith('aiWorkspace.ts'),
+    );
+
+    expect(exists).toBe(true);
   });
 
   it('has no client page importing a workspace component', () => {
     const importers = clientJourneyFiles.filter((path) =>
       /import[^;]*from\s+'[^']*components\/workspace/.test(readFileSync(path, 'utf8')),
     );
+
+    // Includes `components/workspace/CaseSummaryPanel`, which is the reviewer's only AI
+    // surface. It is a component in the workspace directory, so the rule covers it for free —
+    // which is the point of the directory being the boundary's shape in the source tree.
 
     expect(importers.map((path) => relative(SOURCE, path))).toEqual([]);
   });

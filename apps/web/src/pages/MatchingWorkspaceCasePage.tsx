@@ -8,6 +8,7 @@ import { ErrorNote } from '../components/ErrorNote';
 import { LoadingNote } from '../components/LoadingNote';
 import { TextLink } from '../components/TextLink';
 import { CandidateCard } from '../components/workspace/CandidateCard';
+import { CaseSummaryPanel } from '../components/workspace/CaseSummaryPanel';
 import { DecisionProblem, DecisionReasons } from '../components/workspace/DecisionReasons';
 import { JourneyTimeline } from '../components/workspace/JourneyTimeline';
 import { WorkspaceColumns, WorkspaceEyebrow } from '../components/workspace/WorkspaceColumns';
@@ -153,6 +154,18 @@ function CaseView({
         <ClientNeedsSection detail={detail} />
         <SuggestionSection detail={detail} />
         <AlternativesSection detail={detail} />
+        {/*
+          The AI perspective, after the evidence and before the decision.
+
+          That position is the point. The summary *describes* the evidence above it, so a
+          matcher who read it first would be reading a description of something they had not
+          yet looked at — which is how a second reading becomes the first authority. Placed
+          here, it arrives after the rows it is talking about and before the point at which
+          somebody has to choose.
+        */}
+        <section>
+          <CaseSummaryPanel matchId={detail.summary.matchId} />
+        </section>
         <DecisionSection
           detail={detail}
           chosen={chosen}
