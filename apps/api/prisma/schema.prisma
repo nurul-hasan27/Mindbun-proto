@@ -397,6 +397,117 @@ model Feedback {
   @@map("feedback")
 }
 
+/// What a human matcher decided about one pass.
+///
+/// ## The three things this project must never confuse
+///
+/// 1. **The system match** — the row the engine chose. A `Match` with
+///    `status: RECOMMENDED`, immutable, written by `saveRun` and never touched again.
+/// 2. **The human decision** — what a matcher ultimately selected. This table.
+/// 3. **The client recommendation** — who is actually put in front of the client. A
+///    *derived* fact: this decision if one exists for the pass, and the recommended
+///    match if not. Never a column, so it cannot disagree with the two above.
+///
+/// ```text
+/// SYSTEM   therapist A      (a Match row, forever)
+/// HUMAN    therapist B      (a MatchingDecision row, alongside A)
+/// CLIENT   therapist B      (derived; nothing stored saying so)
+/// ```
+///
+/// A is never rewritten. The engine is not retro-fitted to agree with the matcher, and
+/// nothing anywhere claims the algorithm chose B. That is the whole audit trail, and it
+/// only exists because the decision is a separate record rather than an edit.
+///
+/// ## Why `selectedMatchId` and not `selectedTherapistId`
+///
+/// It points at the candidate row, so the database itself guarantees the person chosen
+/// was **one the engine actually evaluated for this pass** — not a stranger, and not a
+/// therapist from another pass. Two further things fall out of that rather than being
+/// checked in application code: "accepted the system suggestion" is literally
+/// `matchId == selectedMatchId`, and the evidence the client is shown can be read from
+/// the selected row without hunting for it by therapist.
+///
+/// A matcher still cannot choose a candidate the engine set aside. A candidate is
+/// `INELIGIBLE` because it did not meet something the client marked as a must-have, and
+/// a human overrule would leave the client with a therapist who does not speak their
+/// language while the page said they did. So the service refuses it, and says why.
+model MatchingDecision {
+  id      String @id @default(uuid()) @db.Uuid
+  /// The pass's recommended match: the case that was reviewed.
+  ///
+  /// Unique, so a case is decided once. A second decision on the same case is a retry,
+  /// not a revision, and returns the first answer — the same rule as a declined match.
+  matchId String @unique @db.Uuid
+
+  /// The candidate the matcher selected. Equal to `matchId` when the system suggestion
+  /// was kept.
+  ///
+  /// Unique, and that is a real invariant rather than tidiness: a candidate row belongs
+  /// to exactly one pass, so it can be the selection for at most one case. A later pass
+  /// gets its own row for the same person — a rematch re-evaluates every candidate — so
+  /// uniqueness costs nothing and makes "the same candidate was chosen for two cases"
+  /// unwriteable.
+  selectedMatchId String @unique @db.Uuid
+
+  /// Whether the suggestion was kept or a different candidate was chosen.
+  decisionType MatchingDecisionType
+
+  /// Optional, in the matcher's own words. Stored, never parsed, never logged, and
+  /// never reachable from a client-facing response. There is no "decided by" field on
+  /// purpose: this prototype has no accounts, and inventing a matcher's name would be
+  /// faking authentication. See `docs/human-matching.md`.
+  note String?
+
+  createdAt DateTime @default(now())
+
+  match         Match                      @relation("ReviewedCase", fields: [matchId], references: [id], onDelete: Cascade)
+  selectedMatch Match                      @relation("SelectedCandidate", fields: [selectedMatchId], references: [id], onDelete: Cascade)
+  reasons       MatchingDecisionToReason[]
+
+  @@index([createdAt])
+  @@map("matching_decisions")
+}
+
+/// The m:n join for a decision's reasons, for the same reason `FeedbackToReason`
+/// exists: several can be true at once, and "better fit for what they asked for" plus
+/// "stronger contextual experience" is one answer a matcher can mean.
+model MatchingDecisionToReason {
+  decisionId String @db.Uuid
+  reasonId   String @db.Uuid
+
+  decision MatchingDecision       @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  reason   MatchingDecisionReason @relation(fields: [reasonId], references: [id], onDelete: Cascade)
+
+  @@id([decisionId, reasonId])
+  @@index([reasonId])
+  @@map("matching_decision_to_reasons")
+}
+
+enum MatchingDecisionType {
+  /// The matcher kept the engine's suggestion.
+  SYSTEM_ACCEPTED
+  /// The matcher chose a different candidate from the same pass.
+  HUMAN_SELECTED_ALTERNATIVE
+}
+
+/// Why a matcher chose one candidate over another.
+///
+/// A key and its wording, and nothing that claims to be a finding. A matcher saying
+/// "stronger contextual experience" is reporting a judgement they made while reading two
+/// profiles; it is not a measurement of either person, and nothing downstream treats it
+/// as one. The wording is written from the matcher's side of the decision for the same
+/// reason the feedback vocabulary is written from the client's.
+model MatchingDecisionReason {
+  id          String @id @default(uuid()) @db.Uuid
+  key         String @unique
+  name        String
+  description String
+
+  decisions MatchingDecisionToReason[]
+
+  @@map("matching_decision_reasons")
+}
+
 /// The terms someone picked, in their own vocabulary.
 ///
 /// A m:n relation, because multiple reasons make real product sense here and a single
@@ -577,6 +688,14 @@ model Match {
   therapist Therapist       @relation(fields: [therapistId], references: [id], onDelete: Cascade)
   evidence  MatchEvidence[]
   feedback  Feedback?
+
+  /// The human decision made about this row, when it was the pass's recommendation.
+  /// One at most, which is what makes a case decidable exactly once.
+  reviewedAsCase MatchingDecision? @relation("ReviewedCase")
+
+  /// Set when a matcher chose *this* candidate for a case. So a pass carries both: the
+  /// row the engine recommended, and the row a human selected from the same pass.
+  selectedInDecision MatchingDecision? @relation("SelectedCandidate")
 
   /// A candidate is evaluated at most once per pass.
   ///

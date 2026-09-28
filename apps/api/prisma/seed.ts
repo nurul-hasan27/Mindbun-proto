@@ -27,6 +27,7 @@ import {
   communicationStyles,
   contextualExperience,
   feedbackReasons,
+  matchingDecisionReasons,
   languages,
   sessionFormats,
   therapeuticApproaches,
@@ -215,6 +216,14 @@ async function upsertVocabularies(client: PrismaClient): Promise<VocabularyIds> 
     });
   }
 
+  for (const reason of matchingDecisionReasons) {
+    await client.matchingDecisionReason.upsert({
+      where: { key: reason.key },
+      update: { name: reason.name, description: reason.description },
+      create: { key: reason.key, name: reason.name, description: reason.description },
+    });
+  }
+
   return ids;
 }
 
@@ -223,6 +232,12 @@ async function resetDomainData(client: PrismaClient): Promise<void> {
   // Matches first, and explicitly, even though deleting an intake or a therapist
   // would cascade to them. Reseeding should not depend on cascade behaviour that
   // belongs to two other tables and can be changed by someone else.
+  await client.matchEvidence.deleteMany();
+  // Explicitly, for the same reason as the rows above: a decision points at two match
+  // rows, and the workspace's cases are decided records rather than something a reseed
+  // should leave behind pointing at rows that no longer exist.
+  await client.matchingDecisionToReason.deleteMany();
+  await client.matchingDecision.deleteMany();
   await client.matchEvidence.deleteMany();
   await client.match.deleteMany();
   await client.feedback.deleteMany();
@@ -241,6 +256,8 @@ async function resetDomainData(client: PrismaClient): Promise<void> {
   // interface offers it and the engine has no rule for it.
   await client.feedbackToReason.deleteMany();
   await client.feedbackReason.deleteMany();
+  await client.matchingDecisionToReason.deleteMany();
+  await client.matchingDecisionReason.deleteMany();
 }
 
 function requireId(ids: ReadonlyMap<string, string>, key: string, kind: string): string {

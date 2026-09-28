@@ -139,6 +139,16 @@ export interface MatchRepository {
   findRun(intakeId: string, attempt: number): Promise<StoredRun | null>;
 
   /**
+   * One candidate's stored evidence, read on its own.
+   *
+   * Needed because after a human review the person presented to the client is not
+   * necessarily the pass's `RECOMMENDED` row, and the reasons on the page must be *that*
+   * person's evidence. Showing the engine's reasons beside a different person would be a
+   * page contradicting itself, which is the single worst thing this project could do.
+   */
+  readCandidateEvidence(matchId: string): Promise<readonly MatchEvidenceInput[]>;
+
+  /**
    * The most recent pass for an intake — the current recommendation.
    *
    * Latest, not first. "Give me a recommendation for this intake" must answer with the

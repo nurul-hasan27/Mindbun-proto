@@ -571,16 +571,46 @@ The properties above survive a rematch unchanged, and each has a test that pins 
   checking the score is higher.
 - **Determinism holds**, including against the order the reasons were ticked in.
 
-The full account is in [`rematching.md`](rematching.md), which is the document for this phase.
+The full account is in [`rematching.md`](rematching.md).
 
-## 15. Where this goes next
+## 15. What a human decision changed about the engine, and what it did not
 
-| Question a reviewer will ask                            | Answered today by                                                          |
-| ------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Why this person, and not another?                       | The stored run: every candidate, its score, its evidence, its eliminations |
-| What does "highly compatible" mean?                     | Nothing on the page. The number exists and is never sent                   |
-| Who else did you consider, and why were they set aside? | `Match.status` and `Match.rejectionCode`, one row per candidate            |
-| Which algorithm produced this?                          | `Match.engineVersion` on every row                                         |
-| Can this decision be reproduced?                        | Yes — the engine is pure and a second run is byte-identical                |
-| Can a client ask for someone else?                      | No. Not built, and the control says so                                     |
-| Can someone be told they are a poor fit?                | No. The engine can decline to recommend, and nothing else                  |
+Phase 7 put a person in front of this engine. Almost everything it did was outside the engine,
+which is the point worth stating plainly: **the engine is unchanged.**
+
+- **No weights moved.** A human decision does not alter a score, a boost, a ceiling or a
+  requirement. A matcher choosing a different therapist produces a _record_ of that choice, and
+  the candidate they picked keeps the score the engine gave them.
+- **No new evidence.** The selected candidate's evidence rows are the ones `saveRun` wrote for the
+  pass. Nothing is added, reweighted or re-explained.
+- **Nothing is re-sorted.** The engine's order is recovered from storage as `score` descending then
+  therapist id ascending — the order it produced — so the workspace shows the engine's shortlist
+  rather than a ranking the interface invented.
+- **The one place the engine's output is read by something new**: the client-facing recommendation
+  presents the selected candidate's evidence rather than the recommended row's, because the client is
+  now shown a different person. Same rows, different reader.
+
+**And the honest consequence, which the seeded demo makes visible.** A stated preference is a
+weight, not a gate, so the engine can suggest someone whose conversation style the client did not
+ask for when another candidate matches it and is level on score. That is not a bug — a preference is
+not a requirement, and the Phase 4 rule says so — but it is exactly the case a human matcher exists
+for, and the workspace surfaces it as a line under the engine's own suggestion: _Not what they
+offered — Style: Exploratory_. The seed and the engine were both left alone rather than tuned to
+make the demo look better.
+
+The full account is in [`human-matching.md`](human-matching.md), which is the document for this
+phase.
+
+## 16. Where this goes next
+
+| Question a reviewer will ask                            | Answered today by                                                                           |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Why this person, and not another?                       | The stored run: every candidate, its score, its evidence, its eliminations                  |
+| What does "highly compatible" mean?                     | Nothing on the page. The number exists and is never sent                                    |
+| Who else did you consider, and why were they set aside? | `Match.status` and `Match.rejectionCode`, one row per candidate                             |
+| Which algorithm produced this?                          | `Match.engineVersion` on every row                                                          |
+| Can this decision be reproduced?                        | Yes — the engine is pure and a second run is byte-identical                                 |
+| Can a client ask for someone else?                      | Yes — a second pass over the same intake, with their reasons taken into account             |
+| Can someone be told they are a poor fit?                | No. The engine can decline to recommend, and nothing else                                   |
+| Can a person disagree with the engine?                  | Yes, and the decision is recorded beside the recommendation rather than over it             |
+| Can a matcher choose someone the engine set aside?      | No. A requirement is the client's, and a human overrule would make a stored sentence untrue |

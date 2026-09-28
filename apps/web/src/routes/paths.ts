@@ -7,6 +7,7 @@ export const paths = {
   recommendation: '/recommendation',
   feedback: '/feedback',
   rematch: '/rematch',
+  matchingWorkspace: '/matching-workspace',
 } as const;
 
 export type AppPath = (typeof paths)[keyof typeof paths];
@@ -26,3 +27,18 @@ export function intakePath(question: string): string {
 }
 
 export const intakeReviewPath = `${paths.intake}/review`;
+
+/**
+ * The internal reviewer's tool. Outside the client journey on purpose.
+ *
+ * Its own key rather than a parameter of some existing path, so that the journey's position
+ * indicator cannot appear on it, the client journey's routes cannot nest inside it, and a
+ * link to it is greppable as a group when the day comes to put it behind a sign-in.
+ */
+export const workspacePaths = {
+  queue: '/matching-workspace',
+} as const;
+
+export function workspaceCasePath(matchId: string): string {
+  return `${workspacePaths.queue}/${encodeURIComponent(matchId)}`;
+}

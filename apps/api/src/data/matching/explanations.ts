@@ -149,17 +149,38 @@ function formatWindow(startMinute: number, endMinute: number): string {
  * should ever see a raw key; the last resort exists so that a bad row cannot produce
  * an empty sentence.
  *
+ * Exported because the reviewer workspace needs the same words for the same keys. A
+ * second naming function would be a second way for a vocabulary key to reach a person as
+ * something other than its own name.
+ *
  * Not lower-cased. A name from the database is a proper noun — "Hindi", "Exploratory"
  * — and turning it into "hindi" would be a small typo in front of a person at the
  * exact moment the product is asking them to trust it. The hand-written phrases are
  * written to run on mid-sentence, so they do not need the help.
  */
-function nameFor(
+export function nameFor(
   category: MatchEvidenceInput['category'],
   key: string,
   vocabulary: ExplanationVocabulary,
 ): string {
   return MATCH_PHRASES[category]?.[key] ?? vocabulary.names.get(key) ?? key.replaceAll('-', ' ');
+}
+
+/**
+ * A stored key as a proper noun, for a place that is naming it rather than using it.
+ *
+ * `nameFor` is the other half of this and the two are easy to confuse. A sentence needs a
+ * phrase that runs mid-clause — "someone who helps you explore things" — while a list of
+ * what a client asked for needs the term itself: "Exploratory", "Career transitions". Using
+ * the phrase version in a list produces rows that read as instructions, and using the noun
+ * in a sentence produces text that is technically true and unreadable.
+ *
+ * Falls back the same way, and for the same reason: the database's own name, then the key
+ * with hyphens turned into spaces, so a term added to the vocabulary before anyone wrote a
+ * phrase for it still appears as something a person can read.
+ */
+export function displayName(key: string, vocabulary: ExplanationVocabulary): string {
+  return vocabulary.names.get(key) ?? key.replaceAll('-', ' ');
 }
 
 export interface ExplanationVocabulary {

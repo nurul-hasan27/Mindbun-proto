@@ -177,18 +177,27 @@ almost always the relevant one.
 
 ### `Match`
 
-One row per candidate the engine evaluated — including the ones it set aside, and why. A
-recommendation is a row with `status = RECOMMENDED`, at most one per intake; there is no separate
+One row per candidate the engine evaluated in one pass — including the ones it set aside, and why. A
+recommendation is a row with `status = RECOMMENDED`, at most one per pass; there is no separate
 recommendation entity, because it would hold nothing but a pointer back to the evaluation it is.
 
-Fields: `clientId`, `intakeId`, `therapistId`, `engineVersion`, `score`, `status`, `rejectionCode`,
-`createdAt`.
+Fields: `clientId`, `intakeId`, `therapistId`, `attempt`, `engineVersion`, `score`, `status`,
+`rejectionCode`, `createdAt`, plus the two relations a human decision uses (below).
+
+`status` is `ELIGIBLE`, `INELIGIBLE`, `RECOMMENDED` or `DECLINED`. `DECLINED` is a statement about
+one person's choice — the client asked to look again — and never about the therapist. See
+`Feedback` for why that distinction is carried in the model rather than in a convention about how
+to phrase it.
+
+**A `Match` row is never updated after it is written.** Not by feedback, not by a decision, not by
+anything. `Feedback` and `MatchingDecision` both point at rows here, and the only write in the
+whole system is `saveRun`.
 
 `score` is an internal integer compatibility figure used only to order candidates. It is never sent
 to a client, never displayed, and never described as a measure of a person: a high score is not a
 better therapist, and the reason the column exists at all is so that a _why_ can be traced back to
-an _ordering_. `status` is `ELIGIBLE`, `INELIGIBLE` or `RECOMMENDED`, and `rejectionCode` is non-null
-exactly when the status is `INELIGIBLE` — a row with no reason is not a shape the engine can write.
+an _ordering_. `rejectionCode` is non-null exactly when the status is `INELIGIBLE` — a row with no reason is not a
+shape the engine can write.
 
 `engineVersion` (`"v1"`) is on every row because matching logic will change, and a result has to be
 attributable to the rules that produced it or it can be neither explained nor recognised as stale.
@@ -267,6 +276,49 @@ Four decisions, and the reasoning is the interesting part:
   than a checkbox allows. There is no `updatedAt`: feedback is a record of a past moment, and if it
   changed it would be a new row.
 
+### `MatchingDecision`
+
+What a human matcher decided about one pass. `matchId` (the pass's `RECOMMENDED` row — the case),
+`selectedMatchId` (the candidate chosen, equal to `matchId` when the suggestion was kept),
+`decisionType`, `note?`, `createdAt`, and the reasons relation.
+
+**A row means exactly this: a person reviewed this case and selected this candidate.** Not that the
+therapist is better, not that the client was right to wait, not that the engine made a mistake.
+Those are judgements, and this model holds the fact that a judgement was made and recorded.
+
+Four decisions, and the reasoning is the interesting part:
+
+- **`selectedMatchId` is a foreign key to `Match`, not a plain therapist id.** Three things fall
+  out of the database rather than out of application code: the person chosen was one the engine
+  actually evaluated for this pass; "accepted the system suggestion" is literally
+  `matchId == selectedMatchId`, so there is no second code path that could drift; and the evidence
+  the client is shown can be read from the selected row without hunting for it by therapist. It is
+  unique, and that is a real invariant — a candidate row belongs to exactly one pass, so it can be
+  the selection for at most one case.
+- **There is no `decidedBy`.** This prototype has no accounts, so any name in that column would be
+  invented, which is faking authentication rather than modelling it. What the record honestly holds
+  is that a human decision was made, and when. See `docs/human-matching.md`.
+- **`matchId` is unique, so a case is decided once.** A repeated request returns the first decision
+  rather than writing a second one, for the same reason `Feedback.matchId` is unique. There is no
+  "revise a decision": a decision is a record of a past moment, and changing it would rewrite the
+  audit trail it exists to keep.
+- **No `updatedAt`, and no soft delete.** Same reasoning as `Feedback.text`.
+
+**The client-facing recommendation is not a column.** It is derived — this decision if one exists for
+the pass, the recommended match if not — so there is no third fact free to disagree with the other
+two. `apps/api/src/data/matching/presented.ts` is the single place that derivation happens, and
+three call sites share it: the client-facing response, the feedback record, and the exclusion set
+for a rematch.
+
+### `MatchingDecisionReason`, `MatchingDecisionToReason`
+
+A vocabulary and an m:n join, for the same reasons `FeedbackReason` and `FeedbackToReason` exist: a
+stable key beside the wording a matcher reads, so a copywriter can rewrite a sentence without
+touching a rule, and several reasons can be true at once.
+
+A reason is a matcher's stated reason for their own choice. It is not a measurement of either
+person and nothing downstream treats it as one.
+
 ---
 
 ## 3. What is deliberately absent
@@ -284,6 +336,11 @@ Four decisions, and the reasoning is the interesting part:
 | A rating, a star score, a thumbs up/down   | A verdict on a person, and not what the person said. The Phase 2 `sentiment` column was removed rather than migrated — see `Feedback` above.                                 |
 | A client preference profile across intakes | Feedback adjusts one journey and is then forgotten. A global exclusion list would quietly shrink the pool each time someone came back, for reasons they could not see.       |
 | `SUPERSEDED`                               | No code path reaches it. A declined match is `DECLINED`; a candidate that lost an ordering is still `ELIGIBLE`.                                                              |
+| A stored "shown to the client" column      | A third fact free to disagree with the engine's recommendation and the human's decision, with the disagreement invisible. It is derived instead.                             |
+| A `decidedBy` on a decision                | There is no logged-in person to record. Inventing a name would be faking authentication.                                                                                     |
+| A decision revision, or a decision history | A decision is a record of a past moment. Editing it would rewrite the trail it exists to keep; the correction for a wrong decision is a new case.                            |
+| Diagnosis, severity, risk, personality     | The system supports compatibility between two people. There is no clinical assessment anywhere in it, and nowhere to store one.                                              |
+| An approval or rejection of the engine     | A matcher either keeps the engine's suggestion or chooses someone else. Both are ordinary outcomes, and the vocabulary says so.                                              |
 
 ---
 

@@ -3,8 +3,10 @@ import { runMatchEngine } from './matchEngine.js';
 import { explainAll, type ExplanationVocabulary } from './explanations.js';
 import { prioritiseEvidence } from './prioritise.js';
 import { readChangeNotes } from './changeNotes.js';
+import { presentedRecommendation } from './presented.js';
 import { statedPreferences } from './signals.js';
 import type { ChangeNote } from './feedbackTypes.js';
+import type { WorkspaceRepository } from './workspaceRepository.js';
 import type { MatchCategory } from './matchingTypes.js';
 import type { RecommendationBody } from './recommendationTypes.js';
 import type { FeedbackRepository } from './feedbackRepository.js';
@@ -73,11 +75,21 @@ export interface RecommendDeps {
    * will be empty. It cannot be faked, so its absence is a gap rather than a lie.
    */
   readonly feedback?: FeedbackRepository;
+  /**
+   * The human reviewer's decision store.
+   *
+   * A dependency of the *client-facing* recommendation because of what the phase added: a
+   * matcher may select someone other than the engine's suggestion, and the client is shown
+   * the person the matcher chose. The client's own response does not change shape, learn a
+   * field, or say anything about review — this is read here so that the same page serves
+   * either, rather than because the client is told anything.
+   */
+  readonly workspace?: WorkspaceRepository;
 }
 
 export async function recommendTherapist(
   intakeId: string,
-  { matches, therapists, feedback }: RecommendDeps,
+  { matches, therapists, feedback, workspace }: RecommendDeps,
 ): Promise<RecommendOutcome> {
   const matchable = await matches.loadMatchableIntake(intakeId);
 
@@ -95,7 +107,7 @@ export async function recommendTherapist(
   if (existing !== null) {
     return {
       kind: 'found',
-      result: await describe(existing, matches, therapists, feedback),
+      result: await describe(existing, matches, therapists, feedback, workspace),
     };
   }
 
@@ -117,7 +129,7 @@ export async function recommendTherapist(
     })),
   });
 
-  return { kind: 'found', result: await describe(saved, matches, therapists, feedback) };
+  return { kind: 'found', result: await describe(saved, matches, therapists, feedback, workspace) };
 }
 
 /**
@@ -133,6 +145,7 @@ async function describe(
   matches: MatchRepository,
   therapists: TherapistRepository,
   feedback: FeedbackRepository | undefined,
+  workspace: WorkspaceRepository | undefined,
 ): Promise<RecommendationOutcome> {
   const stored = run.recommendation;
 
@@ -140,9 +153,34 @@ async function describe(
     return { kind: 'no-candidate', considered: run.considered };
   }
 
+  /**
+   * Who the client is actually shown.
+   *
+   * The engine's recommendation unless a matcher has reviewed this pass, in which case
+   * it is the candidate they selected. Resolved through `presentedRecommendation` so the
+   * feedback record and the exclusion set resolve it identically — see that file for why
+   * three places needing the same answer is a design problem rather than an inconvenience.
+   */
+  const decision =
+    workspace === null || workspace === undefined
+      ? null
+      : ((await workspace.findDecisions([stored.matchId])).get(stored.matchId) ?? null);
+
+  const presented = presentedRecommendation(
+    { matchId: stored.matchId, therapistId: stored.therapistId },
+    decision,
+  );
+
+  // The reasons must belong to the person being shown. Reading the presented candidate's
+  // own rows is the only way to keep that true when the two are not the same person.
+  const presentedEvidence =
+    presented.presentedMatchId === stored.matchId
+      ? stored.evidence
+      : await matches.readCandidateEvidence(presented.presentedMatchId);
+
   const [names, therapist] = await Promise.all([
     matches.readVocabularyNames(),
-    therapists.findById(stored.therapistId),
+    therapists.findById(presented.therapistId),
   ]);
 
   if (therapist === null) {
@@ -152,11 +190,11 @@ async function describe(
   }
 
   const vocabulary: ExplanationVocabulary = { names };
-  const shown: readonly MatchEvidenceInput[] = prioritiseEvidence(stored.evidence);
+  const shown: readonly MatchEvidenceInput[] = prioritiseEvidence(presentedEvidence);
 
   const { previousTherapistName, whatChanged, adjustedFor } = await context(
     run,
-    stored.matchId,
+    presented,
     matches,
     therapists,
     feedback,
@@ -165,6 +203,9 @@ async function describe(
 
   return {
     kind: 'recommended',
+    // The pass's recommended match, not the presented candidate's row. Feedback is filed
+    // against the case, so that the decision about it and the record of declining it stay
+    // attached to the same thing a matcher actually reviewed.
     matchId: stored.matchId,
     attempt: run.attempt,
     therapist,
@@ -211,7 +252,7 @@ const NO_STATED_PREFERENCES: Readonly<Record<MatchCategory, readonly string[]>> 
 
 async function context(
   run: StoredRun,
-  currentMatchId: string,
+  presented: ReturnType<typeof presentedRecommendation>,
   matches: MatchRepository,
   therapists: TherapistRepository,
   feedback: FeedbackRepository | undefined,
@@ -246,7 +287,7 @@ async function context(
     previousTherapistName: therapist?.displayName ?? null,
     whatChanged: await readChangeNotes(
       previous.recommendation.matchId,
-      currentMatchId,
+      presented.presentedMatchId,
       feedback,
       vocabulary,
       // Empty rather than invented when the intake cannot be read: the comparison then

@@ -1,6 +1,7 @@
 import type { PrismaClient } from '../../generated/prisma/client.js';
 import { DataStoreUnavailableError } from '../storeErrors.js';
 import type { DayName } from '../dayOfWeek.js';
+import { presentedTherapistId } from './presented.js';
 import type {
   ComparisonCandidate,
   FeedbackReason,
@@ -50,6 +51,9 @@ export function createPrismaFeedbackRepository(client: PrismaClient): FeedbackRe
             therapistId: true,
             attempt: true,
             status: true,
+            reviewedAsCase: {
+              select: { selectedMatchId: true, selectedMatch: { select: { therapistId: true } } },
+            },
             intake: {
               select: { matches: { where: { status: 'RECOMMENDED' }, select: { id: true } } },
             },
@@ -64,7 +68,19 @@ export function createPrismaFeedbackRepository(client: PrismaClient): FeedbackRe
           matchId: row.id,
           intakeId: row.intakeId,
           clientId: row.clientId,
-          therapistId: row.therapistId,
+          // Who the client was *shown*, which after a human review is not necessarily the
+          // therapist the engine suggested. This is one of three places that needs this
+          // answer, and the reason it is resolved by name in `presented.ts` rather than
+          // written out here.
+          therapistId: presentedTherapistId(
+            { matchId: row.id, therapistId: row.therapistId },
+            row.reviewedAsCase === null
+              ? null
+              : {
+                  selectedMatchId: row.reviewedAsCase.selectedMatchId,
+                  therapistId: row.reviewedAsCase.selectedMatch.therapistId,
+                },
+          ),
           attempt: row.attempt,
           status: row.status,
           isRecommended: row.intake.matches.some((match) => match.id === row.id),
@@ -103,15 +119,29 @@ export function createPrismaFeedbackRepository(client: PrismaClient): FeedbackRe
           // no parameter through which "someone else" could arrive.
           const match = await tx.match.findUniqueOrThrow({
             where: { id: input.matchId },
-            select: { clientId: true, intakeId: true, therapistId: true },
+            select: {
+              clientId: true,
+              intakeId: true,
+              therapistId: true,
+              reviewedAsCase: {
+                select: { selectedMatchId: true, selectedMatch: { select: { therapistId: true } } },
+              },
+            },
           });
+
+          // A complaint is about the person who was shown. After a human review that is
+          // the matcher's choice, so recording the engine's suggestion instead would file
+          // it against a stranger — and the exclusion set would then go on excluding the
+          // wrong person for the rest of the journey.
+          const shownTherapistId =
+            match.reviewedAsCase?.selectedMatch.therapistId ?? match.therapistId;
 
           const feedback = await tx.feedback.create({
             data: {
               matchId: input.matchId,
               clientId: match.clientId,
               intakeId: match.intakeId,
-              therapistId: match.therapistId,
+              therapistId: shownTherapistId,
               text: input.rawText,
               reasons: { create: reasons.map((reasonId) => ({ reasonId })) },
             },
@@ -141,6 +171,9 @@ export function createPrismaFeedbackRepository(client: PrismaClient): FeedbackRe
             attempt: true,
             status: true,
             feedback: { select: { id: true } },
+            reviewedAsCase: {
+              select: { selectedMatchId: true, selectedMatch: { select: { therapistId: true } } },
+            },
           },
         });
 
@@ -154,7 +187,14 @@ export function createPrismaFeedbackRepository(client: PrismaClient): FeedbackRe
         // about one search should follow a person around the service.
         const declined = await client.match.findMany({
           where: { intakeId: row.intakeId, status: 'DECLINED' },
-          select: { therapistId: true, attempt: true },
+          select: {
+            id: true,
+            therapistId: true,
+            attempt: true,
+            reviewedAsCase: {
+              select: { selectedMatchId: true, selectedMatch: { select: { therapistId: true } } },
+            },
+          },
           orderBy: { attempt: 'asc' },
         });
 
@@ -167,10 +207,24 @@ export function createPrismaFeedbackRepository(client: PrismaClient): FeedbackRe
           matchId: row.id,
           intakeId: row.intakeId,
           clientId: row.clientId,
-          therapistId: row.therapistId,
+          therapistId: row.reviewedAsCase?.selectedMatch.therapistId ?? row.therapistId,
           attempt: row.attempt,
           nextAttempt: row.attempt + 1,
-          declinedTherapistIds: declined.map((entry) => entry.therapistId),
+          // Each declined case resolves to whoever the client was actually shown, which
+          // after a human review is the matcher's choice. Excluding the engine's
+          // suggestion instead would leave the person the client rejected eligible again,
+          // and the rematch could return them.
+          declinedTherapistIds: declined.map((entry) =>
+            presentedTherapistId(
+              { matchId: entry.id, therapistId: entry.therapistId },
+              entry.reviewedAsCase === null
+                ? null
+                : {
+                    selectedMatchId: entry.reviewedAsCase.selectedMatchId,
+                    therapistId: entry.reviewedAsCase.selectedMatch.therapistId,
+                  },
+            ),
+          ),
           hasLaterAttempt: laterPass._max.attempt !== null,
           hasFeedback: row.feedback !== null,
         };

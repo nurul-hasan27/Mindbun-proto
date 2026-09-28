@@ -270,6 +270,7 @@ function fakes(knobs: FakeKnobs = {}): Fakes {
     findLatestRun: () => Promise.resolve<StoredRun | null>(null),
     findPreviousRun: () => Promise.resolve<StoredRun | null>(null),
     resolveNextAttempt: () => Promise.resolve({ attempt: 2, taken: false }),
+    readCandidateEvidence: () => Promise.resolve(REMATCH_RUN.recommendation?.evidence ?? []),
     readVocabularyNames: () =>
       Promise.resolve(
         new Map([

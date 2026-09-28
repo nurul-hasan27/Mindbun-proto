@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, type MockedFunction } from 'vitest';
 import { buildApp } from '../../../app.js';
+import type { WorkspaceRepository } from '../../../data/matching/workspaceRepository.js';
 import type { FeedbackRepository } from '../../../data/matching/feedbackRepository.js';
 import type {
   MatchRepository,
@@ -176,6 +177,13 @@ function appWith(built: Fakes) {
     matches: built.matches,
     therapists: built.therapists,
     ...(built.feedback === undefined ? {} : { feedback: built.feedback }),
+    // The route now carries a fourth dependency, because the client must be shown whoever a
+    // matcher chose. These tests are about the client-facing contract and have no human in
+    // the story, so the store is stubbed to "no decisions exist" — which is a fact about
+    // this test's world, not a claim about production.
+    workspace: {
+      findDecisions: () => Promise.resolve(new Map()),
+    } as unknown as WorkspaceRepository,
   });
 }
 
@@ -380,5 +388,33 @@ describe('POST /api/v1/matches', () => {
     });
 
     expect(response.statusCode).toBe(503);
+  });
+
+  it('answers 503 when the review store is unavailable, rather than guessing', async () => {
+    const built = fakes();
+
+    const response = await buildApp({
+      matches: built.matches,
+      therapists: built.therapists,
+      // A decision store that cannot be read means nobody can say whether a matcher
+      // reviewed this case. Falling back to the engine's recommendation would be the
+      // worst available answer: it could put in front of a client the exact person a
+      // matcher decided against. A 503 says "we do not know yet", which is true.
+      workspace: {
+        findDecisions: () => {
+          throw new DataStoreUnavailableError('The matching workspace is not available.');
+        },
+      } as unknown as WorkspaceRepository,
+    }).inject({
+      method: 'POST',
+      url: '/api/v1/matches',
+      headers: { 'content-type': 'application/json' },
+      payload: { intakeId: INTAKE_ID },
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json<{ message: string }>().message).toBe(
+      'We could not reach where matches are recorded right now.',
+    );
   });
 });

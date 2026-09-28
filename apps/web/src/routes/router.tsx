@@ -3,6 +3,8 @@ import { SiteLayout } from '../layouts/SiteLayout';
 import { FeedbackPage } from '../pages/FeedbackPage';
 import { LandingPage } from '../pages/LandingPage';
 import { MatchingPage } from '../pages/MatchingPage';
+import { MatchingWorkspaceCasePage } from '../pages/MatchingWorkspaceCasePage';
+import { MatchingWorkspacePage } from '../pages/MatchingWorkspacePage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { RecommendationPage } from '../pages/RecommendationPage';
 import { RematchPage } from '../pages/RematchPage';
@@ -40,6 +42,17 @@ export const routeConfig: RouteObject[] = [
       // recommendation will point at, and it is reached from there rather than
       // from the journey itself. The journey indicator is hidden here too.
       { path: 'therapists/:id', element: <TherapistProfilePage /> },
+
+      // The internal reviewer's tool, at the edge of the tree and outside the journey.
+      // Unauthenticated in this prototype, and documented as such — see
+      // `docs/human-matching.md`.
+      //
+      // Outside the journey is a routing decision, not a security boundary: this is one
+      // single-page application, so the code below is in the client's bundle and anybody who
+      // types the path can open it. What it buys is that nothing in the client journey
+      // leads here, so a person going through the intake is never shown it.
+      { path: 'matching-workspace', element: <MatchingWorkspacePage /> },
+      { path: 'matching-workspace/:matchId', element: <MatchingWorkspaceCasePage /> },
 
       { path: '*', element: <NotFoundPage /> },
     ],

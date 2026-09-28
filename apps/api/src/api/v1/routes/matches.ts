@@ -2,6 +2,7 @@ import type { FastifyPluginCallback, FastifyReply } from 'fastify';
 import { isUuid } from '../../../data/validators.js';
 import { recommendTherapist } from '../../../data/matching/matchService.js';
 import type { FeedbackRepository } from '../../../data/matching/feedbackRepository.js';
+import type { WorkspaceRepository } from '../../../data/matching/workspaceRepository.js';
 import type { MatchRepository } from '../../../data/matching/matchRepository.js';
 import type { TherapistRepository } from '../../../data/therapists/therapistRepository.js';
 import { DataStoreUnavailableError } from '../../../data/storeErrors.js';
@@ -57,6 +58,21 @@ export function buildMatchRoutes(
    * a guess, and is documented as such on `RecommendDeps`.
    */
   feedback?: FeedbackRepository,
+  /**
+   * The human reviewer's decision store.
+   *
+   * A dependency of a **client-facing** route, and worth reading twice, because it is the
+   * one place the internal workflow touches the client experience. It is here so that after
+   * a matcher has chosen somebody, the person the client is shown is the person the
+   * matcher chose.
+   *
+   * It is not here so the client can learn anything. The response this route sends has the
+   * same fields it has always had, in the same schema, and a client who has never been
+   * reviewed gets byte-identical bytes. That is the privacy boundary for this phase, and it
+   * is structural: a client-facing schema has no field a decision, a matcher's note or an
+   * alternative candidate could travel in, so there is nothing to redact later.
+   */
+  workspace?: WorkspaceRepository,
 ): FastifyPluginCallback {
   return (app, _options, done) => {
     app.post(
@@ -113,6 +129,10 @@ export function buildMatchRoutes(
             matches,
             therapists,
             ...(feedback === undefined ? {} : { feedback }),
+            // Passed through rather than required, so a caller that has not wired a
+            // workspace gets the engine's own recommendation and no error — a gap, which
+            // is honest, rather than a 500 that looks like a broken product.
+            ...(workspace === undefined ? {} : { workspace }),
           });
 
           if (outcome.kind === 'unknown-intake') {

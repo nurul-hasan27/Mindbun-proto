@@ -7,6 +7,9 @@ import { createPrismaIntakeRepository } from './data/intake/prismaIntakeReposito
 import type { FeedbackRepository } from './data/matching/feedbackRepository.js';
 import { createUnavailableFeedbackRepository } from './data/matching/feedbackRepository.js';
 import { createPrismaFeedbackRepository } from './data/matching/prismaFeedbackRepository.js';
+import { createPrismaWorkspaceRepository } from './data/matching/prismaWorkspaceRepository.js';
+import { createUnavailableWorkspaceRepository } from './data/matching/workspaceRepository.js';
+import type { WorkspaceRepository } from './data/matching/workspaceRepository.js';
 import type { MatchRepository } from './data/matching/matchRepository.js';
 import { createPrismaMatchRepository } from './data/matching/prismaMatchRepository.js';
 import { createPrismaTherapistRepository } from './data/therapists/prismaTherapistRepository.js';
@@ -36,6 +39,7 @@ export interface BuildAppOptions {
   readonly intakes?: IntakeRepository;
   readonly matches?: MatchRepository;
   readonly feedback?: FeedbackRepository;
+  readonly workspace?: WorkspaceRepository;
 }
 
 /**
@@ -52,6 +56,7 @@ export function buildApp({
   intakes,
   matches,
   feedback,
+  workspace,
 }: BuildAppOptions = {}): FastifyInstance {
   const app = Fastify({
     logger,
@@ -112,6 +117,7 @@ export function buildApp({
     intakes: intakes ?? unavailableIntakeRepository(),
     matches: matches ?? unavailableMatchRepository(),
     feedback: feedback ?? createUnavailableFeedbackRepository(),
+    workspace: workspace ?? createUnavailableWorkspaceRepository(),
   });
 
   return app;
@@ -131,6 +137,7 @@ export function buildAppWithStore({
     intakes: createPrismaIntakeRepository(prisma),
     matches: createPrismaMatchRepository(prisma),
     feedback: createPrismaFeedbackRepository(prisma),
+    workspace: createPrismaWorkspaceRepository(prisma),
   });
 }
 
@@ -169,6 +176,7 @@ function unavailableMatchRepository(): MatchRepository {
     listCandidates: unavailable,
     saveRun: unavailable,
     findRun: unavailable,
+    readCandidateEvidence: unavailable,
     findLatestRun: unavailable,
     findPreviousRun: unavailable,
     resolveNextAttempt: unavailable,

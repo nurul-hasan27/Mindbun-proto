@@ -52,22 +52,49 @@ meets a request.
 
 ### Routes
 
-| Route             | State       | Purpose                                     |
-| ----------------- | ----------- | ------------------------------------------- |
-| `/`               | implemented | The doorway                                 |
-| `/start`          | implemented | Step 1: what you are looking for            |
-| `/intake/*`       | implemented | Step 2: seven questions, and the review     |
-| `/matching`       | implemented | Step 3: the search, and its honest failures |
-| `/recommendation` | implemented | Step 4: one person, and the reasons         |
-| `/feedback`       | implemented | Step 5: what did not fit                    |
-| `/rematch`        | placeholder | Step 6: another attempt                     |
-| `/therapists/:id` | implemented | One therapist profile, outside the journey  |
-| `*`               | implemented | A considered 404                            |
+| Route                          | State       | Purpose                                     |
+| ------------------------------ | ----------- | ------------------------------------------- |
+| `/`                            | implemented | The doorway                                 |
+| `/start`                       | implemented | Step 1: what you are looking for            |
+| `/intake/*`                    | implemented | Step 2: seven questions, and the review     |
+| `/matching`                    | implemented | Step 3: the search, and its honest failures |
+| `/recommendation`              | implemented | Step 4: one person, and the reasons         |
+| `/feedback`                    | implemented | Step 5: what did not fit                    |
+| `/rematch`                     | placeholder | Step 6: another attempt                     |
+| `/therapists/:id`              | implemented | One therapist profile, outside the journey  |
+| `/matching-workspace`          | implemented | **Internal.** Cases waiting for a decision  |
+| `/matching-workspace/:matchId` | implemented | **Internal.** One case, in full             |
+| `*`                            | implemented | A considered 404                            |
 
 `/therapists/:id` deliberately sits **outside** the journey. A profile is something a
 recommendation will point at, so it is reached from there rather than from the journey itself; the
 header drops its "Start" link on that route rather than pretending it is the beginning, and
 `therapistPath(id)` is the only place a profile URL is built.
+
+### The internal workspace
+
+`/matching-workspace` is also outside the journey, and for a stronger reason: it is not part of the
+client's experience at all. Nothing in the journey links into it and no client route leads out of
+it, so a person going through the intake cannot reach it by clicking. `journeyIndexOf` returns `-1`
+for both of its paths, which is what keeps the client journey's position indicator off them.
+
+It also gets **its own API module**, `lib/api/workspace.ts`, which no client page imports. That is
+worth having, and it is worth being precise about what it is: **a routing boundary, not a security
+one.** There is no route from a client page to a case, a decision, a matcher's note or an
+alternative candidate, so a person going through the intake is never shown one.
+
+It is _not_ a security boundary, and it would be easy to mistake it for one. This is a single-page
+application: the workspace's code is in the same bundle as the client's, and the endpoints are
+unauthenticated. Someone who types `/matching-workspace`, or reads the bundle, can reach all of it.
+The thing that would make it a boundary is an account, and that is deliberately not built — see
+[`human-matching.md`](human-matching.md#authentication-deliberately-not-implemented). A test asserts
+the true half of this claim: that no client-journey page imports the workspace module.
+
+**Unauthenticated.** There is no login, no session and no token anywhere in this codebase, and a
+fake login would be faking authentication rather than modelling it. The route is marked `Internal`
+in the page, the API paths are one greppable family, and `docs/human-matching.md` says plainly that
+on a deployed instance anyone who can reach the path can read every case. The architecture is shaped
+so that putting it behind a guard is one mount; the guard itself does not exist yet.
 
 ### The journey
 
@@ -325,5 +352,10 @@ So, in rough order:
 3. Add a page under `src/pages/`, render `<LoadingNote />` / `<ErrorNote />` around the request.
 4. Add the step to `journey` when it becomes real — nothing else in the shell needs to change.
 
-At two domains, `packages/contracts` is now clearly worth the build step. No new dependency, and
+**One thing Phase 7 added to that list:** an internal surface gets its own API module, and nothing
+in the client journey imports it. The client and internal halves of this application share a
+database, a design system and a component library, and share nothing else — which is what makes
+"a client cannot see any of this" a structural claim rather than a review item.
+
+At three domains, `packages/contracts` is now clearly worth the build step. No new dependency, and
 no change to the design system, should be required.

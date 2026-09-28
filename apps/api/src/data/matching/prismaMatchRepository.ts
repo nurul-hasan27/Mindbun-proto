@@ -214,6 +214,16 @@ export function createPrismaMatchRepository(client: PrismaClient): MatchReposito
         return stored;
       }),
 
+    readCandidateEvidence: (matchId: string): Promise<readonly MatchEvidenceInput[]> =>
+      guard(async () => {
+        const rows = await client.matchEvidence.findMany({
+          where: { matchId },
+          orderBy: { ordinal: 'asc' },
+        });
+
+        return rows.map(fromEvidenceRow);
+      }),
+
     findRun: (intakeId: string, attempt: number): Promise<StoredRun | null> =>
       guard(() => findRun(client, intakeId, attempt)),
 

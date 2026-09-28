@@ -294,3 +294,71 @@ export const feedbackReasons: readonly VocabularyEntry[] = [
     description: 'Something else, which you can put into your own words.',
   },
 ] as const;
+
+/**
+ * Why a human matcher chose one candidate over another.
+ *
+ * The wording is written from the **matcher's** side of the decision, which is the point
+ * and not a detail. A matcher who writes "stronger contextual experience" is reporting a
+ * judgement they made while reading two profiles; it is not a measurement of either
+ * person, and nothing downstream treats it as one. So nothing here says "better therapist",
+ * nothing claims to be a finding, and no key corresponds to any clinical concept.
+ *
+ * The same three rules as every other vocabulary in this file:
+ *
+ * 1. **The key is the contract, the name is copy.** A copywriter can rewrite a sentence
+ *    without touching a rule.
+ * 2. **Every name is written from the person choosing.** These are the matcher's words for
+ *    their own decision, not a verdict on the candidate.
+ * 3. **Nothing is offered that the product cannot honour.** All six are reasons a matcher
+ *    can genuinely hold after reading two profiles and the evidence for each — each names
+ *    an attribute family the engine actually compares, except "Other", which is a box for
+ *    something we did not think to ask about.
+ *
+ * Kept deliberately short. A long list of near-identical reasons is a list nobody reads
+ * carefully, and a matcher choosing between eight overlapping options has made the decision
+ * for them.
+ *
+ * **Every description names both parties.** An earlier wording said "more of the experience
+ * this person said matters to them", which does not say whether *this person* is the client
+ * or the therapist — and a sentence that could be read either way is worse than a plainer
+ * one, because the matcher is the only person who can resolve it and they will not notice
+ * needing to.
+ *
+ * The order they are offered in is alphabetical by key, not the order written here. That
+ * matches every other vocabulary in this project, and an offer list whose order looks
+ * deliberate but is not would be worse than one that plainly is not.
+ */
+export const matchingDecisionReasons: readonly VocabularyEntry[] = [
+  {
+    key: 'better-fit-stated-preferences',
+    name: 'Better fit for what the client asked for',
+    description:
+      'The areas of work this therapist offers overlap more of what the client said they came for.',
+  },
+  {
+    key: 'stronger-contextual-experience',
+    name: 'Stronger contextual experience',
+    description: 'This therapist has more of the experience the client said matters to them.',
+  },
+  {
+    key: 'better-communication-style',
+    name: 'Better communication style',
+    description: 'A way of working closer to the conversation style the client asked for.',
+  },
+  {
+    key: 'better-availability',
+    name: 'Better availability',
+    description: 'More workable time in common with the client.',
+  },
+  {
+    key: 'better-language-fit',
+    name: 'Better language fit',
+    description: 'A closer match on the languages the client said they speak.',
+  },
+  {
+    key: 'other',
+    name: 'Something else',
+    description: 'Something else you can put into your own words.',
+  },
+] as const;

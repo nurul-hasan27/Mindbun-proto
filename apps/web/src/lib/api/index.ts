@@ -11,6 +11,24 @@ export {
 } from './feedback';
 export { requestMatch, requestRecommendation } from './matches';
 export { getTherapist, getTherapists, type TherapistFilters } from './therapists';
+export {
+  fetchCase,
+  fetchCases,
+  fetchClientsWords,
+  submitDecision,
+  type Candidate,
+  type CaseDetail,
+  type CaseSummary,
+  type ClientNeeds,
+  type ClientsWords,
+  type DecisionReason,
+  type DecisionReceipt,
+  type JourneyStep,
+  type NamedNeed,
+  type NotOffered,
+  type RecordedDecision,
+  type SharedReason,
+} from './workspace';
 export { API_V1 } from './version';
 export type { ApiClient, ApiClientOptions, QueryValue, RequestOptions } from './client';
 export { isRecommendation } from './types';

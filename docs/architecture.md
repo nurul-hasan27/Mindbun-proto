@@ -1,50 +1,63 @@
 # Architecture
 
-Phases 1–4 deliver a runnable foundation, a complete visual language, the communication
-architecture between the two applications, a database that can make a future recommendation
-explain itself, and the intake that fills it.
+Phases 1–7 are delivered: a runnable foundation, a complete visual language, the communication
+architecture between the two applications, a database that can make a recommendation explain
+itself, the intake that fills it, a deterministic matching engine, feedback-driven rematching, and
+the internal workspace where a human reviews what the engine produced.
 
 - **Phase 1** — foundation + visual design system.
 - **Phase 2** — application shell + the frontend/backend contract.
 - **Phase 3** — domain model + database foundation.
 - **Phase 4** — client intake experience.
-
-Matching, ranking and recommendation are still deliberately absent: an intake can be completed
-and stored, and nothing yet reads one to choose a therapist.
+- **Phase 5** — explainable deterministic matching engine.
+- **Phase 6** — feedback + rematching.
+- **Phase 7** — human-in-the-loop matching workspace (internal, unauthenticated).
 
 The client is documented in depth in [`frontend-architecture.md`](./frontend-architecture.md), the
-data model in [`domain-model.md`](./domain-model.md), and the intake in
-[`intake-flow.md`](./intake-flow.md). This file covers the whole system.
+data model in [`domain-model.md`](./domain-model.md), the intake in
+[`intake-flow.md`](./intake-flow.md), the engine in [`matching-engine.md`](./matching-engine.md),
+the feedback loop in [`rematching.md`](./rematching.md), and the internal review workflow in
+[`human-matching.md`](./human-matching.md). This file covers the whole system.
 
 ---
 
 ## 1. The shape of the system
 
 ```
-┌──────────────────────────────────────────┐
-│ React client (apps/web)                  │
-│                                          │
-│  page → useApiResource                   │
-│        → lib/api client                  │
-│            getTherapist() / getTherapists│
-└──────────────────┬───────────────────────┘
-                   │ fetch, typed, timeout + cancellation
-                   │ VITE_API_URL, CORS preflight
-┌──────────────────▼───────────────────────┐
-│ Fastify (apps/api)                       │
-│                                          │
-│  /health          infrastructure liveness│  unversioned, no CORS
-│  /api/v1/health   service identity       │
-│  /api/v1/therapists, /therapists/:id     │  versioned, CORS, validated
-│        │                                 │
-│        └─ TherapistRepository (port)     │  injected at the composition root
-│             └─ Prisma adapter           │
-└──────────────────┬───────────────────────┘
-                   │ Prisma 7 + @prisma/adapter-pg
-┌──────────────────▼───────────────────────┐
-│ PostgreSQL 17 (Docker Compose)           │
-│  domain tables + shared vocabularies     │
-└──────────────────────────────────────────┘
+┌───────────────────────────────────────────────┐
+│ React client (apps/web)                       │
+│                                               │
+│  the client journey:                          │
+│    page → useApiResource → lib/api client     │
+│      therapists · intakes · matches · feedback │
+│                                               │
+│  the internal workspace (/matching-workspace): │
+│    workspace.ts — a separate client, and the   │
+│      only file a client page cannot import     │
+└───────────────────┬───────────────────────────┘
+                    │ fetch, typed, timeout + cancellation
+                    │ VITE_API_URL, CORS preflight
+┌───────────────────▼───────────────────────────┐
+│ Fastify (apps/api)                            │
+│                                               │
+│  /health          infrastructure liveness     │  unversioned, no CORS
+│  /api/v1/health   service identity            │
+│  /api/v1/therapists, /intakes, /matches,      │  the client journey
+│    /matches/:id/feedback, /matches/:id/rematch │
+│  /api/v1/matching-workspace/*                 │  INTERNAL, unauthenticated
+│        │                                      │
+│  four repository ports, injected at the root: │
+│    TherapistRepository   the directory        │
+│    IntakeRepository      what a client asked  │
+│    MatchRepository       the engine           │
+│    FeedbackRepository    the conversation     │
+│    WorkspaceRepository   the reviewer's read  │
+└───────────────────┬───────────────────────────┘
+                    │ Prisma 7 + @prisma/adapter-pg
+┌───────────────────▼───────────────────────────┐
+│ PostgreSQL 17 (Docker Compose)                │
+│  domain tables + shared vocabularies          │
+└───────────────────────────────────────────────┘
 ```
 
 | Layer    | Choice                                                                   |
@@ -190,22 +203,39 @@ message }`.
 
 ### Two API surfaces, on purpose
 
-| Endpoint                            | Purpose                                     | CORS | Versioned |
-| ----------------------------------- | ------------------------------------------- | ---- | --------- |
-| `GET /health`                       | Infrastructure liveness for uptime checks   | no   | no        |
-| `GET /api/v1/health`                | Service identity and version for the client | yes  | yes       |
-| `GET /api/v1/therapists`            | A page of therapist summaries               | yes  | yes       |
-| `GET /api/v1/therapists/:id`        | One full profile                            | yes  | yes       |
-| `GET /api/v1/intake/vocabulary`     | Everything an intake may ask about          | yes  | yes       |
-| `POST /api/v1/intakes`              | Store an intake and its preferences         | yes  | yes       |
-| `POST /api/v1/matches`              | One recommendation, and the reasons         | yes  | yes       |
-| `GET /api/v1/feedback/reasons`      | The terms someone can pick from             | yes  | yes       |
-| `POST /api/v1/matches/:id/feedback` | What did not fit, about one match           | yes  | yes       |
-| `POST /api/v1/matches/:id/rematch`  | Look again, differently                     | yes  | yes       |
+| Endpoint                                                      | Purpose                                     | CORS | Versioned |
+| ------------------------------------------------------------- | ------------------------------------------- | ---- | --------- |
+| `GET /health`                                                 | Infrastructure liveness for uptime checks   | no   | no        |
+| `GET /api/v1/health`                                          | Service identity and version for the client | yes  | yes       |
+| `GET /api/v1/therapists`                                      | A page of therapist summaries               | yes  | yes       |
+| `GET /api/v1/therapists/:id`                                  | One full profile                            | yes  | yes       |
+| `GET /api/v1/intake/vocabulary`                               | Everything an intake may ask about          | yes  | yes       |
+| `POST /api/v1/intakes`                                        | Store an intake and its preferences         | yes  | yes       |
+| `POST /api/v1/matches`                                        | One recommendation, and the reasons         | yes  | yes       |
+| `GET /api/v1/feedback/reasons`                                | The terms someone can pick from             | yes  | yes       |
+| `POST /api/v1/matches/:id/feedback`                           | What did not fit, about one match           | yes  | yes       |
+| `POST /api/v1/matches/:id/rematch`                            | Look again, differently                     | yes  | yes       |
+| `GET /api/v1/matching-workspace/cases`                        | Cases waiting for a human decision          | yes  | yes       |
+| `GET /api/v1/matching-workspace/cases/:matchId`               | One case, in full                           | yes  | yes       |
+| `GET /api/v1/matching-workspace/cases/:matchId/clients-words` | Free text, opt-in                           | yes  | yes       |
+| `POST /api/v1/matching-workspace/cases/:matchId/decision`     | Record a decision                           | yes  | yes       |
 
 A load balancer can poll a cheap, version-free path while the client talks to a namespace that can
 evolve. `/api/v1` is where future domains land: `api/v1/routes/` gains a module per domain, and a
 future `/api/v2` can be registered beside it without touching v1.
+
+The last four rows are **internal and unauthenticated.** There is no login, no session and no token
+anywhere in this codebase, and the rows are grouped so that they are greppable as a family and can
+be mounted behind a guard in one place when there is something to guard with. Each of them says so
+in its own OpenAPI description, in the place an integrator would read it. See
+[`human-matching.md`](./human-matching.md#authentication-deliberately-not-implemented).
+
+`POST /api/v1/matches/:id/decision` takes `{ selectedMatchId, reasons, note? }` and nothing else.
+There is no client id, no intake id and no therapist id in the body, and no `decisionType` — the
+server derives that from which candidate was named. The fields are declared without types and
+validated by hand, because Fastify's AJV coerces by default: with a type declared, `[7]` arrives as
+`["7"]`, and a caller could then persist a reason key the vocabulary has never heard of,
+stringified, as though a matcher had chosen it.
 
 The two match endpoints whose responses are deliberately _small_ are `POST /api/v1/matches` and
 `POST /api/v1/matches/:id/rematch`. Each carries one therapist and a handful of sentences, and both
@@ -336,10 +366,13 @@ No CSS-in-JS, no component library, no state library, no HTTP library (the platf
 `AbortController` is enough), no validation framework, no migration tool beyond Prisma, no
 `clsx` (there is a three-line `cx`), no `dotenv` in the service (Node loads it), no icon package.
 
-## 10. Phase 6, and what comes next
+## 10. Phases 6 and 7, and what comes next
 
 Phase 6 is delivered: feedback, and a rematch that takes it into account. The full account is in
 [`rematching.md`](./rematching.md).
+
+Phase 7 is delivered too: the internal workspace where a matcher reviews a case and decides, in
+[`human-matching.md`](./human-matching.md).
 
 One prediction this document made before Phase 6 was wrong, and it is worth recording rather than
 quietly editing out. It said rematching would be _a new intake, not a mutation_. It is not: a
@@ -350,24 +383,30 @@ rewritten and the history is a sequence rather than a set of parallel intakes.
 
 What that leaves for a future phase:
 
-| Concern                 | Where it lands                                                                                                                                   |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| A reviewer screen       | `Match`, `MatchEvidence` and the engine's `CandidateTrace`, which is built and returned today and rendered by nothing                            |
-| Loosening a requirement | A real change to `deriveRequirements` plus a way to re-run a pass with different answers. Both no-match pages link to it and say it is not built |
-| Geographic matching     | A new structured `TherapistProfile` attribute. Not a free-text location lookup                                                                   |
-| "This feels right"      | Recording that a match felt right. The control is present, focusable and honest about not existing yet                                           |
-| Reviewer authentication | A new concern entirely. Nothing in this codebase assumes there is a logged-in user                                                               |
+| Concern                 | Where it lands                                                                                                                                                   |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ~~A reviewer screen~~   | **Delivered in Phase 7.** The engine's `CandidateTrace` was what was waiting for it, and the workspace renders the shortlist from the stored pass                |
+| Loosening a requirement | A real change to `deriveRequirements` plus a way to re-run a pass with different answers. Both no-match pages link to it and say it is not built                 |
+| Geographic matching     | A new structured `TherapistProfile` attribute. Not a free-text location lookup                                                                                   |
+| "This feels right"      | Recording that a match felt right. The control is present, focusable and honest about not existing yet                                                           |
+| Reviewer authentication | The one thing Phase 7 could not do. `/matching-workspace` is unauthenticated, and `MatchingDecision` has no `decidedBy` because inventing one would be faking it |
 
 Guardrails for those phases, so the visual language survives: no new colour outside the clay and
 sage ramps, no component that wears a card unless it is genuinely a surface, no endpoint without a
 schema and a test, no `any`, no free-text attribute that something has to match on later, and no
 client copy that talks about the person as a user being funnelled.
 
-The one thing Phase 6 kept, having now had the chance to break it: the internal score and the full
-candidate list are for a reviewer, never for a client. `CandidateTrace` is a separate type from
-`CandidateEvaluation` precisely so that adding it to a response is never a small change. Feedback
-extends what a client may _say_ and what a client may be _shown next_ — it does not extend what a
-client may be shown _at all_.
+The one thing Phase 6 kept, having now had the chance to break it, and Phase 7 tested by trying:
+the internal score and the full candidate list are for a reviewer, never for a client.
+`CandidateTrace` is a separate type from `CandidateEvaluation` precisely so that adding it to a
+response is never a small change. Feedback extends what a client may _say_ and what a client may be
+_shown next_ — it does not extend what a client may be shown _at all_. A human decision extends the
+same boundary in the same direction: it changes _which_ therapist, never _what kind of information_.
+
+Phase 7's structural answer to "the client must not see any of this" was to give the client API and
+the internal API separate schemas, with no field in the first that anything in the second could
+travel in. There is nothing to redact later, and no future field can leak by accident without
+someone also adding it to a client-facing schema — which is a reviewable act.
 
 The one thing Phase 5 established, and a later phase should not quietly undo: a match that cannot be
 explained from stored evidence is a match this product has no business making. Every key the intake

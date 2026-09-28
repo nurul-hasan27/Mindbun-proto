@@ -28,6 +28,21 @@ The feedback loop — turning a recommendation down, and what happens next:
 | -------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------- |
 | ![Nobody left](docs/screenshots/p6-matching-exhausted-390.jpg) | ![Feedback at 320px](docs/screenshots/p6-feedback-320.jpg) | ![Recommendation at 834px](docs/screenshots/p6-recommendation-834.jpg) |
 
+The internal workspace (`/matching-workspace`, unauthenticated) — where a person reviews what the
+engine produced and decides:
+
+| The queue                                             | What the client needs                                    |
+| ----------------------------------------------------- | -------------------------------------------------------- |
+| ![The queue](docs/screenshots/p7-workspace-queue.jpg) | ![Client needs](docs/screenshots/p7-workspace-needs.jpg) |
+
+| The system's suggestion, and its evidence                          | The alternatives, with their evidence and gaps                  |
+| ------------------------------------------------------------------ | --------------------------------------------------------------- |
+| ![System suggestion](docs/screenshots/p7-workspace-suggestion.jpg) | ![Alternatives](docs/screenshots/p7-workspace-alternatives.jpg) |
+
+| Choosing another, and saying why                            | What the record says afterwards                                     |
+| ----------------------------------------------------------- | ------------------------------------------------------------------- |
+| ![The decision](docs/screenshots/p7-workspace-decision.jpg) | ![The decision recorded](docs/screenshots/p7-workspace-decided.jpg) |
+
 ---
 
 ## Current phase
@@ -38,6 +53,7 @@ The feedback loop — turning a recommendation down, and what happens next:
 **Phase 4 — Client intake experience.** Complete.
 **Phase 5 — Explainable therapist matching engine.** Complete.
 **Phase 6 — Feedback and explainable rematching.** Complete.
+**Phase 7 — Human-in-the-loop matching workspace (internal).** Complete.
 
 Delivered so far:
 
@@ -124,16 +140,63 @@ Delivered so far:
   preference is read from the intake rather than from the previous match's evidence, because a
   preference only appears in evidence when the therapist happened to share it — and the case worth
   describing is precisely when they did not.
-- **A security model that is structural rather than a list of checks.** Both new endpoints take one
-  thing: a match id. There is no field through which a browser could name a client, name a
-  therapist, add to the exclusion list, submit a weight, or ask for a particular person. "I don't
-  know that match" and "not your match" are the same answer, in the same words.
+- **A security model that is structural rather than a list of checks.** Every endpoint in the
+  client loop and the workspace takes one thing: a reference. There is no field through which a
+  browser could name a client, name a therapist, add to the exclusion list, submit a weight, ask for
+  a particular person, or claim a decision was something it was not. "I don't know that match" and
+  "not your match" are the same answer, in the same words.
+- **An internal matching workspace, where the system assists and the person decides.**
+  `/matching-workspace` lists the cases waiting for review; a case page shows what the client asked
+  for, what the engine suggested and the evidence for it, a small set of other candidates with their
+  evidence **and what they do not offer**, and two calm paths — _use this recommendation_ or
+  _choose another therapist_, the second requiring a reason. Reasoning in
+  [`docs/human-matching.md`](docs/human-matching.md).
+- **Three things a reviewer must never be shown, and does not get.** No score, no rank, no
+  percentage, no weight: the engine's internal figure decides an order and then disappears, because
+  a reviewer's case for disagreeing is evidence and a number is an oracle they would learn to defer
+  to. No clinical anything — there is nowhere to store a diagnosis, a severity or a risk. And no
+  arbitrary identifier: no endpoint accepts a client id, an intake id or a therapist id, so a
+  caller cannot steer a review of a person they did not choose.
+- **One real limit on a matcher's authority, stated rather than implied.** A matcher may not choose
+  someone the engine set aside for missing something the client marked as a must-have — a human
+  overrule would put a therapist who does not speak their language in front of a client whose
+  recommendation page said they did. They choose freely among everyone the engine considered
+  viable, and "viable" is a statement about the client's conditions rather than about anyone's
+  worth.
+- **An audit trail that is a property of the code, not a promise.** A decision is a new
+  `MatchingDecision` row _beside_ the engine's recommendation, never an edit of it: the
+  repository a decision is written through has no method that could update a `Match`. Keeping the
+  system suggestion and choosing someone else are recorded as two different facts about the same
+  case, and the client's recommendation is _derived_ from the two rather than stored as a third
+  fact free to disagree with them. A test reads the rows back from the database and asserts the
+  engine's `therapistId`, `score`, `status` and evidence are all exactly as it left them.
+- **The client learns that a person was chosen, and nothing else.** No decision, no note, no
+  candidate list, no score, no "an AI chose someone else". The client-facing response schema gained
+  no field, and a test asserts the serialised key set is identical before and after a decision.
+  After a human review the client is shown whoever the matcher chose, with that person's evidence —
+  a page pairing one person with another's reasons would contradict itself in front of the person
+  least able to check it.
+- **The client's own words, behind an opt-in that can be audited.** They are not in the case
+  payload at all, and reaching for them is a _second request_ — visible in a network log — rather
+  than a field that happened to be populated. Only the exact word `reveal` opens it; `true`, `1`
+  and an empty string all leave it out. Never logged.
+- **The honest finding this phase produced, left unfixed on purpose.** For a client who asked for an
+  exploratory conversation, the engine suggests someone Direct and Structured, and an alternative
+  who does match what was asked for sits level with them on score. That is not a bug: a stated
+  preference is a weight, not a gate. It is the case a human matcher exists for, and the workspace
+  surfaces it as a line under the engine's own suggestion. The seed and the engine were both left
+  alone rather than tuned to make the demo look better.
+- **The limitation stated plainly: there is no authentication.** No login, no session, no token, and
+  no fake login either — inventing one would be faking authentication rather than modelling it. On
+  a deployed instance, anyone who can reach `/matching-workspace` can read every case and record
+  decisions. The paths are one greppable family and every endpoint is reached from a case's match
+  id, so putting the surface behind a guard when there is something to guard with is one mount.
 - Tests, strict TypeScript, ESLint (type-aware + jsx-a11y), Prettier, and written documentation.
 
-Deliberately **not** built: a reviewer screen, geographic matching, clinical or diagnostic matching,
-accounts, authentication, payments, scheduling, a therapist or admin dashboard, and any AI service
-of any kind. The internal ordering figure is not clinically validated — it is a documented
-prototype heuristic, and the document says so.
+Deliberately **not** built: geographic matching, clinical or diagnostic matching, accounts,
+authentication, payments, scheduling, a therapist-facing dashboard, messaging, video, notifications,
+analytics, and any AI service of any kind. The internal ordering figure is not clinically validated
+— it is a documented prototype heuristic, and the document says so.
 
 ## Tech stack
 
@@ -167,26 +230,27 @@ link to a sample therapist profile, so the whole path is visible at a glance.
 
 ### Commands
 
-| Command               | What it does                                                    |
-| --------------------- | --------------------------------------------------------------- |
-| `npm run dev`         | Runs web and api together                                       |
-| `npm run dev:web`     | **Frontend** dev server (Vite), http://localhost:5173           |
-| `npm run dev:api`     | **Backend** dev server (Fastify via tsx), http://127.0.0.1:4000 |
-| `npm run db:up`       | Starts PostgreSQL (`docker compose up -d postgres`)             |
-| `npm run db:down`     | Stops it, keeping data                                          |
-| `npm run db:migrate`  | Creates/applies a migration for local development               |
-| `npm run db:deploy`   | Applies existing migrations only (CI, production)               |
-| `npm run db:seed`     | Clears and reseeds the synthetic dataset, deterministically     |
-| `npm run db:reset`    | Drops, re-migrates and reseeds the database                     |
-| `npm run db:studio`   | Opens Prisma Studio to look at the data                         |
-| `npm run build`       | Type-checks and builds both workspaces                          |
-| `npm run preview:web` | Serves the production web build locally                         |
-| `npm test`            | Every test that does **not** need a database                    |
-| `npm run test:db`     | The database-backed suite (needs `npm run db:up` first)         |
-| `npm run typecheck`   | `tsc --noEmit` for both workspaces                              |
-| `npm run lint`        | ESLint across the repo (`lint:fix` to autofix)                  |
-| `npm run format`      | Prettier write (`format:check` to verify)                       |
-| `npm run check`       | typecheck → lint → format:check → test, in one go               |
+| Command                     | What it does                                                    |
+| --------------------------- | --------------------------------------------------------------- |
+| `npm run dev`               | Runs web and api together                                       |
+| `npm run dev:web`           | **Frontend** dev server (Vite), http://localhost:5173           |
+| `npm run dev:api`           | **Backend** dev server (Fastify via tsx), http://127.0.0.1:4000 |
+| `npm run db:up`             | Starts PostgreSQL (`docker compose up -d postgres`)             |
+| `npm run db:down`           | Stops it, keeping data                                          |
+| `npm run db:migrate`        | Creates/applies a migration for local development               |
+| `npm run db:deploy`         | Applies existing migrations only (CI, production)               |
+| `npm run db:seed`           | Clears and reseeds the synthetic dataset, deterministically     |
+| `npm run db:reset`          | Drops, re-migrates and reseeds the database                     |
+| `npm run db:studio`         | Opens Prisma Studio to look at the data                         |
+| `npm run db:demo:workspace` | Creates one case waiting in `/matching-workspace`, idempotent   |
+| `npm run build`             | Type-checks and builds both workspaces                          |
+| `npm run preview:web`       | Serves the production web build locally                         |
+| `npm test`                  | Every test that does **not** need a database                    |
+| `npm run test:db`           | The database-backed suite (needs `npm run db:up` first)         |
+| `npm run typecheck`         | `tsc --noEmit` for both workspaces                              |
+| `npm run lint`              | ESLint across the repo (`lint:fix` to autofix)                  |
+| `npm run format`            | Prettier write (`format:check` to verify)                       |
+| `npm run check`             | typecheck → lint → format:check → test, in one go               |
 
 > **Adding a dependency?** Prefer editing `package.json` and running `npm install` over
 > `npm install <pkg>`. Incremental installs have been observed to drop esbuild's platform-specific
@@ -265,10 +329,15 @@ npm run db:migrate   # migrate + seed
 npm run db:seed      # reset to the 50 synthetic therapists
 npm run db:reset     # drop everything, re-migrate, re-seed
 npm run db:studio    # browse the data
+
+# A case waiting in the internal workspace, so the review flow has something to open.
+# Goes through the real HTTP routes in-process, so it cannot drift from the product.
+npm run db:demo:workspace
 ```
 
 Entities: `Client`, `Intake`, `ClientPreference`, `ClientAvailability`, `Therapist`,
-`TherapistProfile`, `AvailabilityWindow`, `Feedback`, and the shared vocabularies — `Language`,
+`TherapistProfile`, `AvailabilityWindow`, `Match`, `MatchEvidence`, `Feedback`, `FeedbackReason`,
+`MatchingDecision`, `MatchingDecisionReason`, and the shared vocabularies — `Language`,
 `TherapeuticApproach`, `AreaOfWork`, `CommunicationStyle`, `ContextualExperience`, `SessionFormat`,
 `FeedbackReason`. What each one is for, and what is deliberately missing, is in
 [`docs/domain-model.md`](docs/domain-model.md).
@@ -331,6 +400,7 @@ therapist routes report `503`. Liveness should not go down because a database is
 │   ├── intake-flow.md          the questions, the mapping, the state, the payload
 │   ├── matching-engine.md      the pipeline, the weights, availability, evidence, limits
 │   ├── rematching.md           feedback, signals, exclusions, history, what changed
+│   ├── human-matching.md       the review workflow, the decision, the audit trail
 │   ├── design-system.md        the visual language
 │   └── screenshots/
 └── package.json              npm workspaces root
@@ -338,6 +408,12 @@ therapist routes report `503`. Liveness should not go down because a database is
 
 ## Documentation
 
+- [`docs/human-matching.md`](docs/human-matching.md) — the internal review workflow: the three
+  facts that must never be confused, the decision model and why `selectedMatchId` is a foreign key,
+  the one limit on a matcher's authority, the decision reasons, what a reviewer sees, alternatives
+  and why there are only four, what a candidate does not carry, the audit trail, the opt-in on
+  free text, the API contract, the privacy boundary, why authentication is deliberately absent, and
+  the limitations.
 - [`docs/rematching.md`](docs/rematching.md) — the feedback model and why the rating column was
   removed, the feedback-to-signal mapping and what it must never become, exclusion behaviour and
   scope, the rematch lifecycle, the matching history, how "what changed" decides what it may say,

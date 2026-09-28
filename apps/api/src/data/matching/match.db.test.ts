@@ -4,6 +4,7 @@ import { buildApp } from '../../app.js';
 import { createTestPrismaClient } from '../../test/database.js';
 import { createPrismaIntakeRepository } from '../intake/prismaIntakeRepository.js';
 import { createPrismaMatchRepository } from './prismaMatchRepository.js';
+import { createPrismaWorkspaceRepository } from './prismaWorkspaceRepository.js';
 import { createPrismaTherapistRepository } from '../therapists/prismaTherapistRepository.js';
 import { recommendTherapist } from './matchService.js';
 import type { IntakeRequest } from '../intake/intakeTypes.js';
@@ -22,6 +23,7 @@ import type { IntakeRequest } from '../intake/intakeTypes.js';
 
 const prisma = createTestPrismaClient();
 const matches = createPrismaMatchRepository(prisma);
+const workspace = createPrismaWorkspaceRepository(prisma);
 const therapists = createPrismaTherapistRepository(prisma);
 const intakes = createPrismaIntakeRepository(prisma);
 
@@ -438,7 +440,7 @@ describe('the API against a real database', () => {
   it('answers end to end, from an intake to a recommendation', async () => {
     await forgetEverything();
     const { intakeId, sessionId } = await submitIntake();
-    const app = buildApp({ matches, therapists, intakes });
+    const app = buildApp({ matches, therapists, intakes, workspace });
 
     const response = await app.inject({
       method: 'POST',
@@ -469,7 +471,7 @@ describe('the API against a real database', () => {
   it('reads the same recommendation again on a retry', async () => {
     await forgetEverything();
     const { intakeId, sessionId } = await submitIntake();
-    const app = buildApp({ matches, therapists, intakes });
+    const app = buildApp({ matches, therapists, intakes, workspace });
 
     const first = await app.inject({
       method: 'POST',

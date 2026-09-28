@@ -211,6 +211,40 @@ list is a heading rather than a caption. The only action on the page is a way ba
 
 Those absences are enforced by a test, so the page cannot quietly become a marketplace later.
 
+### An internal tool is not a dashboard
+
+Phase 7 added `/matching-workspace`, a surface for a person doing a job rather than a person
+choosing care. The rule that keeps it inside this design language is the same one the client pages
+follow, applied to a different subject: **the absences are what matter.**
+
+Absent: a sidebar, a KPI row, a chart, a badge, an analytics panel, a dense table, a stock-photo
+avatar, a gradient "AI copilot" panel, and any number about a person. The only figure on the queue is
+how many cases are waiting, and it is a sentence rather than a headline — "2 cases are waiting" is
+fine, a large number above a list is a dashboard, and a dashboard is a different product with
+different intentions towards the person reading it.
+
+Present: the same warm canvas, the same hairlines, the same serif headings, the same spacing scale,
+the same focus treatment, the same reduced-motion behaviour. Nothing is redeclared. What differs is
+density — a matcher compares things, so a label and its value sit on one line — and that difference
+has exactly one new pattern behind it:
+
+> **A margin label and a content column.** `10rem` of small-caps label, then the content, with the
+> two collapsing to one column below `md`.
+
+That is the only new visual pattern the phase introduces, and it is a named component
+(`WorkspaceColumns`) rather than a `grid` written out per page — a pattern written in four places is
+a pattern that will be thinner in one of them.
+
+Two decisions inside it worth recording, because both were found by looking at the rendered page
+rather than at the code:
+
+- **A section with no margin label still starts its content in the second column.** A lone grid
+  child lands in the _first_ column, so "What this client needs" sat in the 10rem label column and
+  wrapped to three words. The page now has a single content edge.
+- **Rows, not a table.** A table is right for a queue at 1440px and wrong at 320px, where it is a
+  horizontal scroll. Rows that stack do both: fields become lines when narrow, a grid puts them in
+  columns when wide. Verified with no horizontal overflow at 320, 390, 834 and 1440.
+
 ## 7. Motion
 
 Motion exists to explain a change of page, never to entertain.

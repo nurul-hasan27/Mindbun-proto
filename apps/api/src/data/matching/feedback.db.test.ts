@@ -5,6 +5,7 @@ import { createTestPrismaClient } from '../../test/database.js';
 import { createPrismaFeedbackRepository } from './prismaFeedbackRepository.js';
 import { createPrismaIntakeRepository } from '../intake/prismaIntakeRepository.js';
 import { createPrismaMatchRepository } from './prismaMatchRepository.js';
+import { createPrismaWorkspaceRepository } from './prismaWorkspaceRepository.js';
 import { createPrismaTherapistRepository } from '../therapists/prismaTherapistRepository.js';
 import { requestRematch, recordFeedback } from './feedbackService.js';
 import { recommendTherapist } from './matchService.js';
@@ -24,6 +25,7 @@ import type { IntakeRequest } from '../intake/intakeTypes.js';
 
 const prisma = createTestPrismaClient();
 const matches = createPrismaMatchRepository(prisma);
+const workspace = createPrismaWorkspaceRepository(prisma);
 const feedback = createPrismaFeedbackRepository(prisma);
 const therapists = createPrismaTherapistRepository(prisma);
 const intakes = createPrismaIntakeRepository(prisma);
@@ -593,7 +595,7 @@ describe('the API, end to end against a real database', () => {
   it('takes feedback, looks again, and answers with a different person', async () => {
     await forgetEverything();
     const { intakeId, sessionId } = await submitIntake();
-    const app = buildApp({ matches, feedback, therapists, intakes });
+    const app = buildApp({ matches, feedback, therapists, intakes, workspace });
 
     const first = await app.inject({
       method: 'POST',
@@ -652,7 +654,7 @@ describe('the API, end to end against a real database', () => {
   it('gives the same rematch twice, because the engine is deterministic', async () => {
     await forgetEverything();
     const { intakeId, sessionId } = await submitIntake();
-    const app = buildApp({ matches, feedback, therapists, intakes });
+    const app = buildApp({ matches, feedback, therapists, intakes, workspace });
 
     const first = await app.inject({
       method: 'POST',
@@ -684,7 +686,7 @@ describe('the API, end to end against a real database', () => {
   it('refuses to look again before a reason has been given', async () => {
     await forgetEverything();
     const { intakeId, sessionId } = await submitIntake();
-    const app = buildApp({ matches, feedback, therapists, intakes });
+    const app = buildApp({ matches, feedback, therapists, intakes, workspace });
 
     const first = await app.inject({
       method: 'POST',
