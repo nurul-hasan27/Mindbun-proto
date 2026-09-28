@@ -1,4 +1,6 @@
 import type { FastifyPluginCallback, FastifyPluginOptions } from 'fastify';
+import type { AiProvider } from '../../../ai/aiProvider.js';
+import { createUnavailableAiProvider } from '../../../ai/buildAiProvider.js';
 import type { IntakeRepository } from '../../../data/intake/intakeRepository.js';
 import type { FeedbackRepository } from '../../../data/matching/feedbackRepository.js';
 import type { MatchRepository } from '../../../data/matching/matchRepository.js';
@@ -10,6 +12,8 @@ import { buildFeedbackRoutes } from './feedback.js';
 import { buildMatchRoutes } from './matches.js';
 import { buildWorkspaceRoutes } from './workspace.js';
 import { buildTherapistRoutes } from './therapists.js';
+import { buildAiRoutes } from './ai.js';
+import { buildAiWorkspaceRoutes } from './aiWorkspace.js';
 
 export interface V1RouteOptions {
   readonly therapists: TherapistRepository;
@@ -17,6 +21,15 @@ export interface V1RouteOptions {
   readonly matches: MatchRepository;
   readonly feedback: FeedbackRepository;
   readonly workspace: WorkspaceRepository;
+  /**
+   * The AI layer.
+   *
+   * A dependency like every other store, and defaulted to an honest "unavailable" so that a
+   * test which does not care about AI can omit it and get a `503` rather than a crash. The
+   * composition root in `app.ts` is the only place that knows whether a real model, the
+   * deterministic mock, or nothing at all is behind it.
+   */
+  readonly ai?: AiProvider;
 }
 
 /**
@@ -58,6 +71,25 @@ export const v1Routes: FastifyPluginCallback<FastifyPluginOptions & V1RouteOptio
   // decision beside them; it has no method that could write a `Match`, which is what keeps
   // the audit trail from being a promise rather than a property of the code.
   app.register(buildWorkspaceRoutes(options.workspace, options.matches, options.therapists));
+
+  // The AI layer. Two surfaces, and they are deliberately not the same route builder.
+  //
+  // The intake companion is client-facing: it interprets someone's own words and returns
+  // vocabulary keys, and it writes nothing. It sits with the other client routes.
+  const ai = options.ai ?? createUnavailableAiProvider();
+  app.register(buildAiRoutes({ ai, intakes: options.intakes }));
+
+  // The case summary is not. It reads a case, so it lives under the reviewer's namespace
+  // and inherits the boundary Phase 7 established — no client route reaches it, and no
+  // client page imports the client that calls it.
+  app.register(
+    buildAiWorkspaceRoutes({
+      workspace: options.workspace,
+      matches: options.matches,
+      therapists: options.therapists,
+      ai,
+    }),
+  );
 
   done();
 };

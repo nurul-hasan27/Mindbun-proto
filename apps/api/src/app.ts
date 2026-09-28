@@ -1,7 +1,10 @@
+import type { Writable } from 'node:stream';
 import cors from '@fastify/cors';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import { v1Routes } from './api/v1/routes/index.js';
-import type { LogLevel } from './config/env.js';
+import { buildAiProvider } from './ai/buildAiProvider.js';
+import type { AiProvider } from './ai/aiProvider.js';
+import { readServerConfig, type AiConfig, type LogLevel } from './config/env.js';
 import type { IntakeRepository } from './data/intake/intakeRepository.js';
 import { createPrismaIntakeRepository } from './data/intake/prismaIntakeRepository.js';
 import type { FeedbackRepository } from './data/matching/feedbackRepository.js';
@@ -25,8 +28,15 @@ export interface BuildAppOptions {
   /**
    * `false` keeps Fastify silent, which is what tests want. Pass a level to enable
    * structured request logging in development.
+   *
+   * `stream` is accepted because "nothing sensitive reaches a log line" is a claim that has
+   * to be tested rather than asserted, and a test cannot read what it cannot capture. The
+   * production wiring never passes one.
    */
-  readonly logger?: false | { readonly level: LogLevel };
+  readonly logger?: false | {
+    readonly level: LogLevel;
+    readonly stream?: Writable;
+  };
   /** Browser origins allowed to call the API. */
   readonly corsOrigins?: readonly string[];
   /**
@@ -40,6 +50,17 @@ export interface BuildAppOptions {
   readonly matches?: MatchRepository;
   readonly feedback?: FeedbackRepository;
   readonly workspace?: WorkspaceRepository;
+  /**
+   * Which AI implementation to build, and with what credentials.
+   *
+   * Defaults to whatever the environment says, which with nothing set is the deterministic
+   * mock — so `buildApp()` in a test gets a working assistant with no key and no account,
+   * and a deployment chooses its provider without a line of code changing. A test that
+   * wants none can pass `aiProvider` and hand in a refusing one.
+   */
+  readonly aiConfig?: AiConfig;
+  /** An already-built provider, for a test injecting a fake or a failure. */
+  readonly aiProvider?: AiProvider;
 }
 
 /**
@@ -57,6 +78,8 @@ export function buildApp({
   matches,
   feedback,
   workspace,
+  aiConfig = readServerConfig().ai,
+  aiProvider,
 }: BuildAppOptions = {}): FastifyInstance {
   const app = Fastify({
     logger,
@@ -111,13 +134,22 @@ export function buildApp({
   }
 
   app.register(infrastructureHealthRoute);
+
+  // Built once, here, and passed in like every other dependency — so nothing below this line
+  // knows whether an LLM exists. The vocabulary thunk reads through whichever intake store is
+  // actually in use, so a test that injects an in-memory vocabulary gets a provider that
+  // reads that same vocabulary rather than a second, divergent one.
+  const resolvedIntakes = intakes ?? unavailableIntakeRepository();
+  const ai = aiProvider ?? buildAiProvider(aiConfig, () => resolvedIntakes.readVocabulary());
+
   app.register(v1Routes, {
     prefix: API_PREFIX,
     therapists: therapists ?? unavailableTherapistRepository(),
-    intakes: intakes ?? unavailableIntakeRepository(),
+    intakes: resolvedIntakes,
     matches: matches ?? unavailableMatchRepository(),
     feedback: feedback ?? createUnavailableFeedbackRepository(),
     workspace: workspace ?? createUnavailableWorkspaceRepository(),
+    ai,
   });
 
   return app;
@@ -127,7 +159,10 @@ export function buildApp({
 export function buildAppWithStore({
   logger,
   corsOrigins,
-}: { logger?: { level: LogLevel }; corsOrigins?: readonly string[] } = {}): FastifyInstance {
+}: {
+  logger?: { level: LogLevel };
+  corsOrigins?: readonly string[];
+} = {}): FastifyInstance {
   const prisma = getPrismaClient();
 
   return buildApp({

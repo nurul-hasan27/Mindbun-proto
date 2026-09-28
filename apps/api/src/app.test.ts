@@ -38,6 +38,16 @@ describe('readServerConfig', () => {
       logLevel: 'info',
       corsOrigins: ['http://localhost:5173', 'http://127.0.0.1:5173'],
       databaseUrl: '',
+      // With nothing set the assistant is the deterministic mock. A clone and a `npm run
+      // dev` give a working product with no account, which is the only reason a reviewer
+      // without a key can see any of this.
+      ai: {
+        provider: 'mock',
+        apiKey: '',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-4o-mini',
+        timeoutMs: 20_000,
+      },
     });
   });
 
@@ -58,7 +68,38 @@ describe('readServerConfig', () => {
       logLevel: 'warn',
       corsOrigins: ['https://app.example', 'https://admin.example'],
       databaseUrl: 'postgresql://user:pass@localhost:5432/why_this_match',
+      ai: {
+        provider: 'mock',
+        apiKey: '',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-4o-mini',
+        timeoutMs: 20_000,
+      },
     });
+  });
+
+  it('reads the AI configuration from the environment, and nowhere else', () => {
+    const config = readServerConfig({
+      AI_PROVIDER: 'openai-compatible',
+      AI_API_KEY: 'sk-live-value',
+      AI_BASE_URL: 'https://gateway.internal/v1',
+      AI_MODEL: 'llama-3.1-70b',
+      AI_TIMEOUT_MS: '9000',
+    });
+
+    expect(config.ai).toEqual({
+      provider: 'openai-compatible',
+      apiKey: 'sk-live-value',
+      baseUrl: 'https://gateway.internal/v1',
+      model: 'llama-3.1-70b',
+      timeoutMs: 9_000,
+    });
+  });
+
+  it('refuses to start on a real provider with no key, rather than failing silently', () => {
+    // The one combination that is a genuine mistake: an explicit request for a provider that
+    // cannot work. A missing key alone is fine — that is the mock.
+    expect(() => readServerConfig({ AI_PROVIDER: 'openai-compatible' })).toThrow(/AI_API_KEY/);
   });
 
   it('rejects values it cannot understand', () => {
