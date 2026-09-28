@@ -298,9 +298,10 @@ export function IntakeCompanionPage() {
           <ConversationLog messages={messages} announcedUpTo={announcedUpTo} />
 
           {pending && (
-            <p className="border-line border-t py-6">
+            // A `div`, because `LoadingNote` is a `p` and a paragraph cannot contain one.
+            <div className="border-line border-t py-6">
               <LoadingNote>Making sense of that.</LoadingNote>
-            </p>
+            </div>
           )}
 
           {turnError !== null && <TurnError error={turnError} onRetry={() => setTurnError(null)} />}
@@ -350,10 +351,13 @@ export function IntakeCompanionPage() {
               )}
 
               {extractError !== null && (
-                <p className="text-small text-clay-700 mt-4" role="alert">
-                  Something went wrong while reading that back. What you wrote is still here.{' '}
+                // A `div` rather than a `p`, because `QuietButton` renders a button and a
+                // button inside a paragraph is invalid HTML — which React warns about now
+                // and which would be a hydration error in a future that hydrates this page.
+                <div className="text-small text-clay-700 mt-4" role="alert">
+                  <p>Something went wrong while reading that back. What you wrote is still here.</p>{' '}
                   <QuietButton onClick={askForSuggestions}>Try again</QuietButton>
-                </p>
+                </div>
               )}
             </div>
           )}

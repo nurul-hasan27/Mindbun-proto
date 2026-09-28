@@ -81,11 +81,12 @@ export function CaseSummaryPanel({ matchId, className }: CaseSummaryPanelProps) 
     return (
       <div className={cx('border-line border-t pt-6', className)}>
         <h2 className="text-label text-ink-muted font-medium uppercase">AI perspective</h2>
-        <p className="mt-4">
+        {/* A `div`, because `LoadingNote` is a `p` and a paragraph cannot contain one. */}
+        <div className="mt-4">
           {/* The same quiet line as everywhere else. Not "AI is thinking" — the page has a
               habit of being honest about waiting, and this keeps it. */}
           <LoadingNote>Reading the case.</LoadingNote>
-        </p>
+        </div>
       </div>
     );
   }
