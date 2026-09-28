@@ -56,6 +56,7 @@ meets a request.
 | ------------------------------ | ----------- | ------------------------------------------- |
 | `/`                            | implemented | The doorway                                 |
 | `/start`                       | implemented | Step 1: what you are looking for            |
+| `/intake/companion`            | implemented | Step 2, optional: say it in your own words  |
 | `/intake/*`                    | implemented | Step 2: seven questions, and the review     |
 | `/matching`                    | implemented | Step 3: the search, and its honest failures |
 | `/recommendation`              | implemented | Step 4: one person, and the reasons         |
@@ -78,17 +79,26 @@ client's experience at all. Nothing in the journey links into it and no client r
 it, so a person going through the intake cannot reach it by clicking. `journeyIndexOf` returns `-1`
 for both of its paths, which is what keeps the client journey's position indicator off them.
 
-It also gets **its own API module**, `lib/api/workspace.ts`, which no client page imports. That is
-worth having, and it is worth being precise about what it is: **a routing boundary, not a security
-one.** There is no route from a client page to a case, a decision, a matcher's note or an
-alternative candidate, so a person going through the intake is never shown one.
+It also gets **its own API modules**, `lib/api/workspace.ts` and `lib/api/aiWorkspace.ts`, which no
+client page imports and neither of which is exported from `lib/api/index.ts`. That is worth
+having, and it is worth being precise about what it is: **a routing boundary, not a security
+one.** There is no route from a client page to a case, a decision, a matcher's note, an
+alternative candidate or an AI case summary, so a person going through the intake is never shown
+one.
+
+The two AI clients are on **opposite sides** of that boundary, and the asymmetry is deliberate.
+`lib/api/ai.ts` — the intake companion — is exported from the barrel, because a client page is
+supposed to be able to reach it. `lib/api/aiWorkspace.ts` is not, and a test asserts both facts,
+so the asymmetry is a decision on the record rather than an omission somebody tidies up later.
 
 It is _not_ a security boundary, and it would be easy to mistake it for one. This is a single-page
 application: the workspace's code is in the same bundle as the client's, and the endpoints are
 unauthenticated. Someone who types `/matching-workspace`, or reads the bundle, can reach all of it.
 The thing that would make it a boundary is an account, and that is deliberately not built — see
 [`human-matching.md`](human-matching.md#authentication-deliberately-not-implemented). A test asserts
-the true half of this claim: that no client-journey page imports the workspace module.
+the true half of this claim: that no client-journey page imports either workspace module, and a
+second assertion covers the barrel so the boundary holds for a file that has not been written
+yet.
 
 **Unauthenticated.** There is no login, no session and no token anywhere in this codebase, and a
 fake login would be faking authentication rather than modelling it. The route is marked `Internal`
@@ -202,16 +212,36 @@ appears in the client, in a schema, or in a payload.
 
 ## 6. State boundaries
 
-| Kind                | Where it lives                                                      | Why                                                                                    |
-| ------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Server data         | Nowhere persistent. `useApiResource` in the component that needs it | A remount re-fetches. There is no cache yet, and pretending otherwise would be a lie.  |
-| One async resource  | `useApiResource(load, deps)`                                        | Derived `loading`, abortable, no global store                                          |
-| In-progress answers | `IntakeProvider`, above the question routes                         | Survives navigation, because navigating swaps the question and not the state behind it |
-| URL                 | The only state that survives a refresh                              | Deep links, back/forward, and shareable links all work for free                        |
-| Configuration       | `lib/api/config.ts`, read once at module load                       | Build-time constants, not runtime state                                                |
+| Kind                | Where it lives                                                        | Why                                                                                    |
+| ------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Server data         | Nowhere persistent. `useApiResource` in the component that needs it   | A remount re-fetches. There is no cache yet, and pretending otherwise would be a lie.  |
+| One async resource  | `useApiResource(load, deps)`                                          | Derived `loading`, abortable, no global store                                          |
+| In-progress answers | `IntakeProvider`, above the question routes                           | Survives navigation, because navigating swaps the question and not the state behind it |
+| A conversation      | The component, plus `sessionStorage` via `lib/intake/conversation.ts` | The tab is the right lifetime for what somebody typed. See below                       |
+| URL                 | The only state that survives a refresh                                | Deep links, back/forward, and shareable links all work for free                        |
+| Configuration       | `lib/api/config.ts`, read once at module load                         | Build-time constants, not runtime state                                                |
 
 There is no context, no store, and no cache. When several pages need the same data, the first
 honest step is to put it in a hook or the URL — not to reach for a global store.
+
+### The AI layer adds no state of its own
+
+Worth being explicit, because a "conversation" is exactly the kind of thing that invites a store.
+
+**The transcript is not a store.** It is a `useState` in `IntakeCompanionPage`, mirrored to
+`sessionStorage` by one small module. There is no context, no reducer, no provider, and no
+persisted suggestion — because a persisted _suggestion_ is a persisted inference about someone,
+which is a different kind of thing to leave on a device than something they typed.
+
+**The assistant cannot write to the draft.** `lib/intake/suggestions.ts` is the whole of the
+mechanism: `applySuggestion` is a `switch` over the `target` the server sent, and every branch
+ends in one of the draft's own `toggle*` functions. There is no path from a suggestion to
+`update()` that does not go through there, and no function in this codebase that would let one.
+
+**The case summary is not state either.** `CaseSummaryPanel` holds one discriminated union —
+unrequested, loading, ready, refused — and that is all. It is a read of a derived view, refetched
+on demand, and there is nothing to keep in sync because nothing on the page changes when it
+arrives.
 
 ## 7. Loading and error states
 
@@ -267,6 +297,45 @@ That split is why a refresh, a bookmark and a shared link all work without a sin
 preserve it; closing the tab has to destroy it. Session storage is the only browser store that does
 both, and `localStorage` — which would outlive the tab on a shared machine — was rejected on those
 grounds rather than on convenience.
+
+### The conversation assistant, in this architecture
+
+`/intake/companion` is mounted **inside** the `/intake` subtree, which is what gives it the same
+`IntakeProvider` the questions use. It is not a parallel flow with its own answers; it is a way of
+arriving at the same ones.
+
+Three consequences, all of them the point:
+
+- **Confirmed suggestions become the draft**, through `applySuggestion`, and the review page then
+  reads one object. There is no merge step, because there is no second object.
+- **`Change` navigates to the question that would adjust it**, so a suggestion that is roughly right
+  is corrected where the person chose it rather than in a bespoke editor.
+- **The questions are always one link away**, and there are at least two such links on the page in
+  every state. A conversation that trapped someone would be a worse intake than the one it
+  replaced.
+
+The performance rules are structural rather than remembered. One request per sent message, from a
+submit handler; no request on a keystroke; the only effect that runs on mount renders a local
+greeting, and it is the reason a double-invoked effect cannot produce two turns. A superseded turn
+is aborted through the same `AbortSignal` the rest of this client uses.
+
+## 9a. The AI case summary, in this architecture
+
+On the case page, between the alternatives and the decision.
+
+**It is below the evidence, not above it.** The summary describes the evidence above it, so a
+matcher who read it first would be reading a description of something they had not yet looked at.
+That is how a second reading becomes the first authority.
+
+**It is on demand.** `unrequested` is the initial state, and the fetch lives in the click handler.
+
+**It is not exported.** `lib/api/aiWorkspace.ts` is a sibling of `lib/api/workspace.ts` and, like
+it, is not re-exported from `lib/api/index.ts`. `workspaceBoundary.test.ts` asserts both facts, so
+a new client page cannot reach it by accident and a future file cannot be added past the rule.
+
+**It has no controls that touch the decision.** One button, _write it again_. There is no route
+from this component to eligibility, ranking, or `MatchingDecision`, and a test enumerates the
+buttons on screen to keep that true.
 
 ### Where the vocabulary comes from
 

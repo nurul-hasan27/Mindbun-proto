@@ -31,6 +31,12 @@ phone shots.
 not copied from any directory. The footer says so on every page. Say it out loud
 once — it is the fastest way to establish that nothing here is a real person's data.
 
+**No API key is needed.** The intake assistant and the matcher's case summary both run on a
+deterministic local provider with nothing configured, which is why Scenario A and Scenario C
+work on a fresh clone. You do not have to set anything up before starting, and it is worth
+saying so — most prototypes with an AI feature cannot be reviewed by someone without an
+account.
+
 **There is no authentication.** `/matching-workspace` is open to anyone who can reach
 it, on purpose: this prototype has no accounts, and a fake login would be pretending
 to a security model that does not exist. Say it when you get to Scenario C, because
@@ -63,26 +69,57 @@ explanation is generated from stored evidence rather than written beside it.
    > 'exploratory' are words therapy uses about itself, and someone arriving with a
    > hard month has every reason to think they are about to be asked to choose one."
 
-3. **The questions.** Click through, picking a couple of answers. **Leave one blank on
+3. **Optional detour: say it in your own words.** From the start page, go to
+   **`/intake/companion`** and type something ordinary:
+
+   > "I've been overwhelmed at work lately. I moved to Germany a few years ago and I
+   > think part of what I'm struggling with is balancing what my family expects from me
+   > with what I actually want. I'd rather talk things through than be given homework."
+
+   Then click **Show me what you understood**. Say the things that matter:
+
+   > "Notice it read 'I'd rather talk things through than be given homework' as
+   > _exploratory_ and not as _structured_. A keyword matcher cannot parse negation, so
+   > the mock checks for a rejection in the sentence around a match — and it errs
+   > towards a miss, because a lost suggestion is correctable on this page and a wrong
+   > one is not."
+
+   > "Also notice what it did **not** do. It wrote nothing. Keep, Change and Not quite are
+   > all offered, none is pre-selected, and until you press one, nothing has been saved."
+
+   Keep two, change one with **Change** (which takes you to the question that would adjust
+   it), reject one with **Not quite**, and continue into the questions. The kept answers are
+   already filled in.
+
+   > "The conversation is a single column of prose with a quiet speaker marker. No
+   > bubbles, no tails, no avatars — every one of those is a way of saying 'this is a
+   > messaging app', and it is not one. Somebody telling a stranger something difficult
+   > is not in a conversation with an equal, and a two-column layout asserts that they
+   > are whatever the words happen to say."
+
+   > "And the last thing on the page is a link to the questions, with a second one
+   > above it. There is no state in which somebody is trapped in the assistant."
+
+4. **The questions.** Click through, picking a couple of answers. **Leave one blank on
    purpose** and say so.
 
    > "Three of the seven are optional, and leaving one blank is a supported thing to
    > do rather than a failure. The review screen says so."
 
-4. **Review.** _You told us…_
+5. **Review.** _You told us…_
 
    > "Each answer has an Edit link. This is the moment where someone should feel
    > confident rather than like they have submitted a form — which is why the heading
    > is 'You told us' and not 'Summary'."
 
-5. **Finding a fit.**
+6. **Finding a fit.**
 
    > "This step used to be skipped on a first pass, which meant the journey indicator
    > promised a step that never happened. It is honest about what it is doing and it
    > does not pretend to take longer than it does — the search is milliseconds, and a
    > spinner longer than that would be theatre."
 
-6. **The recommendation.** This is the important screen. Scroll to _Why we thought you
+7. **The recommendation.** This is the important screen. Scroll to _Why we thought you
    might connect_.
 
    > "Every line is generated from a key that was stored when the match ran. Change the
@@ -91,7 +128,7 @@ explanation is generated from stored evidence rather than written beside it.
    > schema declares `additionalProperties: false`, so adding one fails the API's own
    > tests rather than reaching a browser."
 
-7. **The actions.** Point at the two controls.
+8. **The actions.** Point at the two controls.
    > "'This feels right' is present and deliberately inert — recording that a match
    > felt right is genuinely not built, and a control that silently does nothing is
    > worse than one that says why. 'I'd like another option' is the live path. Note

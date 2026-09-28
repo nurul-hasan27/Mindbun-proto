@@ -30,10 +30,12 @@ the feedback loop in [`rematching.md`](./rematching.md), and the internal review
 │  the client journey:                          │
 │    page → useApiResource → lib/api client     │
 │      therapists · intakes · matches · feedback │
+│      ai.ts        the intake companion         │
 │                                               │
 │  the internal workspace (/matching-workspace): │
-│    workspace.ts — a separate client, and the   │
-│      only file a client page cannot import     │
+│    workspace.ts + aiWorkspace.ts — a separate  │
+│      client, and the only files a client page  │
+│      cannot import                            │
 └───────────────────┬───────────────────────────┘
                     │ fetch, typed, timeout + cancellation
                     │ VITE_API_URL, CORS preflight
@@ -44,7 +46,9 @@ the feedback loop in [`rematching.md`](./rematching.md), and the internal review
 │  /api/v1/health   service identity            │
 │  /api/v1/therapists, /intakes, /matches,      │  the client journey
 │    /matches/:id/feedback, /matches/:id/rematch │
+│  /api/v1/ai/intake/turn, /ai/intake/extract   │  the companion. Writes nothing
 │  /api/v1/matching-workspace/*                 │  INTERNAL, unauthenticated
+│        └── cases/:id/ai-summary                │  also INTERNAL
 │        │                                      │
 │  four repository ports, injected at the root: │
 │    TherapistRepository   the directory        │
@@ -52,11 +56,19 @@ the feedback loop in [`rematching.md`](./rematching.md), and the internal review
 │    MatchRepository       the engine           │
 │    FeedbackRepository    the conversation     │
 │    WorkspaceRepository   the reviewer's read  │
+│        │                                      │
+│  one AI port, injected the same way:          │
+│    AiProvider  mock | openai-compatible        │
+│      · no matching store is imported here      │
+│      · the case context has no free text       │
 └───────────────────┬───────────────────────────┘
                     │ Prisma 7 + @prisma/adapter-pg
-┌───────────────────▼───────────────────────────┐
-│ PostgreSQL 17 (Docker Compose)                │
-│  domain tables + shared vocabularies          │
+┌───────────────────▼───────────────────────────�─│
+│ PostgreSQL 17 (Docker Compose)                 │
+│  domain tables + shared vocabularies           │
+│                                               │
+│  no AI table. No conversation table.           │
+│  Nothing about a model is stored.              │
 └───────────────────────────────────────────────┘
 ```
 
@@ -163,6 +175,9 @@ src/
 │                     request validation that answers in sentences
 ├── data/matching/    the matching engine, one module per pipeline stage, plus
 │                     its port and Prisma adapter
+├── ai/               the AI provider port, its two implementations, the
+│                     vocabulary validator, the safety guard and the grounding
+│                     check. Imports no matching store.
 ├── test/             test-database helpers
 └── api/
     └── v1/
@@ -200,6 +215,15 @@ message }`.
   validated loudly at start-up rather than becoming confusing runtime errors.
 - Logging is Fastify's built-in Pino, silenced in tests. `SIGINT`/`SIGTERM` close the server and the
   database pool.
+- **The AI provider is injected like a store.** Routes take an `AiProvider`, never a vendor SDK, so
+  the whole AI surface is testable without a network and `buildAiProvider` in `app.ts` is the only
+  place that reads `AiConfig`. With nothing configured it builds the deterministic mock, so the
+  process starts and the product works with no key.
+- **The AI layer imports no matching store.** `ai/caseContext.ts` imports exactly one type from the
+  matching layer — the shape of a case, with no behaviour — and a structural test asserts it is the
+  only file in the layer that reaches across at all. The layer is handed vocabulary names, not a
+  repository, which is what makes "unknown keys are rejected against the database" a runtime check
+  rather than a claim about a copy of the vocabulary.
 
 ### Two API surfaces, on purpose
 
@@ -366,7 +390,14 @@ No CSS-in-JS, no component library, no state library, no HTTP library (the platf
 `AbortController` is enough), no validation framework, no migration tool beyond Prisma, no
 `clsx` (there is a three-line `cx`), no `dotenv` in the service (Node loads it), no icon package.
 
-## 10. Phases 6, 7 and 8, and what comes next
+**And no AI SDK.** The real provider is the platform `fetch` against an OpenAI-compatible
+`/chat/completions`, which is already a dependency of every runtime we have. An official SDK
+would have added a package, a transitive tree and an audit finding to make a request we can make
+in thirty lines — and would have made the _endpoint_ the thing that is configurable, rather than
+the code. `AI_BASE_URL` points the same code at OpenAI, a gateway, a self-hosted vLLM, or
+Ollama's compatible endpoint, and swapping vendors is an environment variable.
+
+## 10. Phases 6, 7, 8 and 9, and what comes next
 
 Phase 6 is delivered: feedback, and a rematch that takes it into account. The full account is in
 [`rematching.md`](./rematching.md).
@@ -405,6 +436,51 @@ The alternative — having the recommendation page render from the match record 
 because that record deliberately holds an id and a name rather than the evidence, and widening
 it would mean keeping a client's recommendation in `sessionStorage`, which is the opposite of
 what the privacy design is for.
+
+### Phase 9: the AI layer
+
+Phase 9 adds two surfaces and deliberately changes almost nothing else. The account is in
+[`ai.md`](./ai.md); what belongs here is how it sits in the system.
+
+**The engine is unchanged.** Not one line of `data/matching/` was touched, and no test there was
+weakened. The claim is structural rather than a matter of discipline: the `AiProvider` port's
+output types have nowhere to put a therapist, a score or a rank, the AI layer imports no matching
+store, and `ai/caseContext.ts` reaches the matching layer for exactly one type — the shape of a
+case, with no behaviour. A structural test asserts each of those, and was verified by deliberately
+breaking the three most important and confirming the test fails.
+
+**Two ports, injected the same way.** The AI provider is a dependency like the four repositories,
+so `buildApp()` can be exercised with no assistant, the tests can inject a fake or a failure, and
+`app.ts` is still the only place that knows which implementation is wired. With nothing
+configured it builds a deterministic mock, so a clone and `npm run dev` give the whole product
+with no key — which is the only reason a reviewer without an account can see any of it.
+
+**No new data.** No conversation table, no `ai_logs`, no table of summaries. The transcript lives
+in the browser's `sessionStorage` beside the intake draft and is removed when the intake is sent;
+the case summary is recomputed per request from the rows the evidence came from. There is nothing
+to record because nothing is retained, and a table of model output is a liability rather than a
+feature.
+
+**Two boundaries, and they are different in kind.** The intake companion is client-facing and
+writes nothing: applying a suggestion is `applySuggestion`, which routes through the same
+`toggle*` functions the questions use, on a page where every suggestion can be seen and undone. The
+case summary lives under `/matching-workspace` and so inherits Phase 7's structural boundary — its
+client is not exported from the barrel, and `workspaceBoundary.test.ts` now covers both workspace
+clients. That is a **routing boundary, not a security boundary**, and the same correction made in
+Phase 8 applies: the workspace ships in the same bundle as the client, and the endpoints are
+unauthenticated.
+
+What is left for a future phase:
+
+| Concern                                       | Where it lands                                                                                                                                                                                |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ~~A reviewer screen~~                         | **Delivered in Phase 7.** The engine's `CandidateTrace` was what was waiting for it, and the workspace renders the shortlist from the stored pass                                             |
+| ~~An assistant that can read plain language~~ | **Delivered in Phase 9**, within the boundary above. A better model is a configuration change, not a code change                                                                              |
+| Loosening a requirement                       | A real change to `deriveRequirements` plus a way to re-run a pass with different answers. Both no-match pages link to it and say it is not built                                              |
+| Geographic matching                           | A new structured `TherapistProfile` attribute. Not a free-text location lookup                                                                                                                |
+| "This feels right"                            | Recording that a match felt right. The control is present, focusable and honest about not existing yet                                                                                        |
+| Reviewer authentication                       | The one thing Phase 7 could not do. `/matching-workspace` is unauthenticated, and `MatchingDecision` has no `decidedBy` because inventing one would be faking it                              |
+| An explicit safety flow                       | The redirect in `ai/safety.ts` exists because doing nothing is worse. A real flow with real escalation is a different project, and inferring one from messages would be worse than a redirect |
 
 One prediction this document made before Phase 6 was wrong, and it is worth recording rather than
 quietly editing out. It said rematching would be _a new intake, not a mutation_. It is not: a

@@ -1,6 +1,6 @@
 # The AI layer
 
-*Why it exists, what it may do, and the line it does not cross.*
+_Why it exists, what it may do, and the line it does not cross._
 
 ---
 
@@ -15,13 +15,13 @@ any of that, and no test in this phase was weakened to accommodate it.
 
 That rule is not a convention the rest of the codebase is trusted to observe. It
 is a property of the types in `apps/api/src/ai/aiProvider.ts`. Look at what a
-provider is *able* to return:
+provider is _able_ to return:
 
 - `AiSignal` carries a category, a key, a confidence, a source and a sentence.
   There is no field for a therapist, a match, a score, a rank, or a
   requirement. A provider cannot name a person, because the shape it fills in
   has nowhere to put one.
-- `AiCaseSummary` carries prose, about a case identified by *our* `matchId`.
+- `AiCaseSummary` carries prose, about a case identified by _our_ `matchId`.
   Every claim in it is checked against stored evidence before it is returned.
 
 Adding a field that reached the engine would be visible in review, because it
@@ -33,13 +33,13 @@ would have to appear in that file.
 
 Two surfaces, and they are deliberately not the same thing.
 
-| | Intake companion | Matcher case summary |
-|---|---|---|
-| **Who** | a client, in the intake | a human matcher, in the workspace |
-| **Where** | `/intake/companion` | the case page, under `/matching-workspace` |
-| **Route** | `POST /api/v1/ai/intake/turn`<br>`POST /api/v1/ai/intake/extract` | `GET /api/v1/matching-workspace/cases/:matchId/ai-summary` |
-| **Does** | interprets what someone said into vocabulary keys | describes a case from its stored evidence |
-| **Writes** | nothing | nothing |
+|            | Intake companion                                                  | Matcher case summary                                       |
+| ---------- | ----------------------------------------------------------------- | ---------------------------------------------------------- |
+| **Who**    | a client, in the intake                                           | a human matcher, in the workspace                          |
+| **Where**  | `/intake/companion`                                               | the case page, under `/matching-workspace`                 |
+| **Route**  | `POST /api/v1/ai/intake/turn`<br>`POST /api/v1/ai/intake/extract` | `GET /api/v1/matching-workspace/cases/:matchId/ai-summary` |
+| **Does**   | interprets what someone said into vocabulary keys                 | describes a case from its stored evidence                  |
+| **Writes** | nothing                                                           | nothing                                                    |
 
 Both answers go to the same place: a person decides. The client confirms or
 rejects each suggestion; the matcher records a `MatchingDecision` exactly as
@@ -112,7 +112,7 @@ the names in it. A term added to the seed is searched the moment it exists, with
 no change to the code.
 
 Its honest limitation, which the docs carry and this paragraph repeats: it
-understands the words someone uses *about* their preferences, and nothing else.
+understands the words someone uses _about_ their preferences, and nothing else.
 It does not read "I've been a wreck since my mother died" as grief and loss, and
 it will not pretend to. A model does. That difference is the entire reason the
 abstraction exists.
@@ -121,7 +121,7 @@ Two behaviours worth naming because they were deliberate:
 
 - **It checks for rejection in the sentence around a match.** The brief's own
   example — "I'd rather talk things through than be given homework" — would
-  otherwise come back as a preference for *Structured*, in front of the person
+  otherwise come back as a preference for _Structured_, in front of the person
   who said the opposite. A keyword matcher cannot parse negation, so this errs
   towards a miss. A lost suggestion is correctable on an approval page; a wrong
   one is not.
@@ -155,7 +155,7 @@ uncorrectable from their side.
 **Drops are reported, not swallowed.** Three distinct claims, three fields:
 
 - `signals` — understood, and it lands somewhere.
-- `notUnderstood` — said, but with nowhere to go. "I couldn't place *integrative*;
+- `notUnderstood` — said, but with nowhere to go. "I couldn't place _integrative_;
   the intake has no question about approaches."
 - `surplus` — understood, and there was no room. A list silently cut to eight
   presents itself as the whole of what was understood, and it is not.
@@ -199,11 +199,11 @@ and a prompt.
   support. The honest response to "I don't want to be here" is not to keep
   matching somebody to them.
 
-The patterns are phrase-based and narrow. They match the *shape of a request for
-care*, not the presence of a difficult topic, because a list that fired on
+The patterns are phrase-based and narrow. They match the _shape of a request for
+care_, not the presence of a difficult topic, because a list that fired on
 "therapy" would fire on "I've never done therapy before" and shut down the
 conversation this exists to have. Thirteen such sentences are pinned as
-*allowed* in `safety.test.ts`, and the tests assert both directions.
+_allowed_ in `safety.test.ts`, and the tests assert both directions.
 
 **This is a redirect, not a triage system.** It does not evaluate level, history,
 intent or immediacy, and it is not a substitute for a clinician or a crisis
@@ -228,7 +228,7 @@ recomputed on each request from the same rows the evidence came from, which is
 why it cannot go stale relative to the evidence beside it, and why a `GET` is the
 honest verb for it.
 
-`conversation.test.ts` asserts that a stored transcript holds *only* `role` and
+`conversation.test.ts` asserts that a stored transcript holds _only_ `role` and
 `text`: no identifiers, no provider name, no suggestions. A stored suggestion
 would be a stored **inference about someone**, which is a different kind of thing
 to leave lying around.
@@ -241,7 +241,7 @@ anything about a provider's key.
 Verified rather than asserted: `apps/api/src/api/v1/routes/ai.test.ts` builds
 the app with a log sink and reads what would have been written, on both the
 failure path and the validation-rejection path. Free text appears in no log
-line. (Fastify's validation error names the offending *field* and not its value;
+line. (Fastify's validation error names the offending _field_ and not its value;
 that was checked before the schema was written, not assumed.)
 
 ### What the case summariser is shown
@@ -280,7 +280,7 @@ verdicts are refused by phrase.**
 
 ### What it does not check
 
-Whether a sentence about someone who *is* in the case is a fair characterisation
+Whether a sentence about someone who _is_ in the case is a fair characterisation
 of them. Nothing lexical can, and a check that claimed to would be claiming more
 than it does. The controls that do that are upstream: the provider is given no
 biography, no score and no free text, so there is nothing to mischaracterise.
@@ -290,7 +290,7 @@ This check is the backstop for what slips past the prompt, not a substitute.
 
 A refused summary produces a failed summary, the page says so, and the
 deterministic evidence a matcher came for is untouched. A summary that is
-quietly *almost* grounded is the thing that cannot be detected afterwards, so the
+quietly _almost_ grounded is the thing that cannot be detected afterwards, so the
 check is built to be the annoying one. A caller-curated list of ordinary
 reporting vocabulary is the limit of it, and a word nobody thought of is
 refused.
@@ -299,19 +299,19 @@ refused.
 
 ## Failure behaviour
 
-| Situation | What happens | What a person sees |
-|---|---|---|
-| No key configured | `AI_PROVIDER` defaults to `mock` | Nothing. The product works. |
-| `openai-compatible` with no key | Refuses to **start** | — |
-| Provider times out or is unreachable | `502` | "Something went wrong while interpreting that. Your answers are still here." + Try again |
-| Assistant switched off | `503` | "The conversation assistant is switched off." + the questions |
-| Malformed or oversized provider output | Rejected by the validator | Fewer suggestions, and the surplus reported |
-| Case summary fails its check | `502` | "Left out rather than shown unchecked. The evidence is unchanged." |
-| Store unreachable | `503` | "We could not read the questions just now." |
+| Situation                              | What happens                     | What a person sees                                                                       |
+| -------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------- |
+| No key configured                      | `AI_PROVIDER` defaults to `mock` | Nothing. The product works.                                                              |
+| `openai-compatible` with no key        | Refuses to **start**             | —                                                                                        |
+| Provider times out or is unreachable   | `502`                            | "Something went wrong while interpreting that. Your answers are still here." + Try again |
+| Assistant switched off                 | `503`                            | "The conversation assistant is switched off." + the questions                            |
+| Malformed or oversized provider output | Rejected by the validator        | Fewer suggestions, and the surplus reported                                              |
+| Case summary fails its check           | `502`                            | "Left out rather than shown unchecked. The evidence is unchanged."                       |
+| Store unreachable                      | `503`                            | "We could not read the questions just now."                                              |
 
 **The user never loses their intake.** Every failure path leaves the draft
 exactly as it was, and the questions are always reachable — tested for a
-*network* failure, a *503*, and an assistant that has ended the conversation.
+_network_ failure, a _503_, and an assistant that has ended the conversation.
 
 Nothing is stored server-side, so there is nothing to clean up on failure. The
 client aborts a superseded turn, so a slow reply for an older message cannot
@@ -355,14 +355,14 @@ overwrite the one that was actually asked for.
 
 ## Documentation index
 
-| Document | Covers |
-|---|---|
-| `docs/architecture.md` | Where the AI layer sits in the system |
-| `docs/frontend-architecture.md` | The companion page and the workspace panel |
-| `docs/design-system.md` | Why the conversation is not a chat log |
-| `docs/human-matching.md` | Why the summary lives in the workspace namespace |
-| `docs/demo.md` | Walking through both surfaces |
-| **this file** | What AI may do, and what it may not |
+| Document                        | Covers                                           |
+| ------------------------------- | ------------------------------------------------ |
+| `docs/architecture.md`          | Where the AI layer sits in the system            |
+| `docs/frontend-architecture.md` | The companion page and the workspace panel       |
+| `docs/design-system.md`         | Why the conversation is not a chat log           |
+| `docs/human-matching.md`        | Why the summary lives in the workspace namespace |
+| `docs/demo.md`                  | Walking through both surfaces                    |
+| **this file**                   | What AI may do, and what it may not              |
 
 ---
 

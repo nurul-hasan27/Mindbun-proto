@@ -25,7 +25,9 @@ sense.
 So the product does three things, in this order:
 
 1. **Asks what matters, in plain language.** Seven questions, one at a time, three of them
-   optional. Nothing scored, nothing required, no clinical vocabulary to learn first.
+   optional. Nothing scored, nothing required, no clinical vocabulary to learn first. Or, if
+   words come easier than a form, an optional conversation that reads what you wrote back to
+   you as answers to those same questions — for you to keep, change or ignore.
 2. **Shows its reasoning.** Every recommendation arrives with the reasons, written out as
    sentences a person can read — generated from stored evidence, so they cannot drift away
    from the facts that produced them.
@@ -36,6 +38,25 @@ So the product does three things, in this order:
 And underneath all of it, a **person makes the final call**. The engine suggests; a
 matcher reviews the evidence and either agrees or chooses somebody else, with a reason.
 The client is shown whoever was chosen and is told nothing about the machinery.
+
+### Where the AI fits
+
+There is an AI layer, and it is deliberately the smallest part of the product.
+
+It does two things. For a client, it can listen to something written in their own words and
+read it back as answers to the existing questions — which someone then confirms, changes or
+ignores, one suggestion at a time. For a matcher, it can write a short second reading of a
+case from the stored evidence beside it.
+
+It does not decide anything. It cannot name a therapist, cannot score, cannot rank, and
+cannot write to the database. That is enforced by the _types_ rather than by convention: a
+provider's output has nowhere to put a person or a number, and the case summariser is never
+shown a client's free text, a biography or a score in the first place. A summary that
+mentions anything the case does not contain is refused rather than shown unchecked.
+
+**The whole product works with no AI at all.** With nothing configured, a deterministic local
+provider answers both surfaces, so a clone, an install and `npm run dev` give you everything
+here with no account and no key. See [docs/ai.md](docs/ai.md).
 
 ---
 
@@ -74,6 +95,8 @@ None of those are marketing problems. They are modelling problems, and the answe
  ↓
 /start               what you will be asked, and that you need not know the vocabulary
  ↓
+/intake/companion    optional · say it in your own words, check what was understood
+ ↓
 /intake/*            seven questions, one at a time, three optional
  ↓
 /intake/review       "You told us…" — change anything, then send
@@ -93,7 +116,8 @@ And the internal side, which a client never sees:
 
 ```
 /matching-workspace                       cases waiting for a decision
-/matching-workspace/:matchId              needs · suggestion · alternatives · decision · history
+/matching-workspace/:matchId              needs · suggestion · alternatives
+                                            · AI perspective (on request) · decision · history
 ```
 
 ---
@@ -186,6 +210,7 @@ Browser (React)
               ├─ /health            infrastructure liveness (unversioned, no CORS)
               └─ /api/v1/*           the versioned application API
                   ├─ therapist · intake · matching · feedback · matching-workspace
+                  │      └─ ai/*  →  AiProvider  →  mock  |  openai-compatible
                   └─ Prisma → PostgreSQL
 ```
 
@@ -194,8 +219,21 @@ ports sit between the routes and Prisma, each injected at the composition root, 
 API is testable without a database and `app.ts` is the only place that knows which
 implementation is wired.
 
-The port that matters most for this phase is `WorkspaceRepository`, which holds **no method
-that writes a `Match`**.
+Two ports matter more than the rest, and they are the two boundaries this product argues
+for:
+
+- **`WorkspaceRepository`** holds **no method that writes a `Match`**, so a decision is a
+  record beside the engine's work rather than an edit of it.
+- **`AiProvider`** has three methods — take a conversational turn, read a transcript as
+  structured suggestions, summarise a case — and **its output types have nowhere to put a
+  therapist, a score or a rank**. The AI can interpret language and summarise. It cannot
+  decide anything, and that is a property of the types rather than a rule the codebase is
+  trusted to follow.
+
+The real provider is plain `fetch` against an OpenAI-compatible endpoint, so the API gains no
+new dependency, no new supply chain and no new audit finding. With nothing configured, a
+deterministic local provider answers both AI surfaces, which is why the whole product is
+usable by a reviewer with no key.
 
 Full documentation, with what each document is for:
 
@@ -208,6 +246,7 @@ Full documentation, with what each document is for:
 | [`docs/architecture.md`](docs/architecture.md)                   | Repository shape, the request path, testing strategy                                                                       |
 | [`docs/frontend-architecture.md`](docs/frontend-architecture.md) | Routing, the API client, and where state is allowed to live                                                                |
 | [`docs/design-system.md`](docs/design-system.md)                 | Philosophy, tokens, components, motion, accessibility                                                                      |
+| [`docs/ai.md`](docs/ai.md)                                       | **The AI layer**: what it may do, the provider abstraction, the privacy boundary, and the line it does not cross           |
 | [`docs/intake-flow.md`](docs/intake-flow.md)                     | Every question, the human wording mapped to database keys                                                                  |
 | [`docs/demo.md`](docs/demo.md)                                   | **How to walk someone through it**                                                                                         |
 
@@ -283,9 +322,10 @@ engine produced and decides:
 | Testing  | Vitest 5, Testing Library, Fastify `inject`, and a real-database test project |
 | Tooling  | ESLint 9 (flat config, type-aware), Prettier 3, npm workspaces                |
 
-No ORM beyond Prisma, no auth, no AI APIs, no Next.js, no Python — by design. There is also no
-state-management library, no UI framework and no animation library, and each of those absences
-is a decision rather than an oversight.
+No ORM beyond Prisma, no auth, no Next.js, no Python — by design. There is also no state-management
+library, no UI framework, no animation library, and **no AI SDK** (the platform `fetch` against
+an OpenAI-compatible endpoint is enough, and it keeps the vendor a configuration value rather
+than a dependency). Each of those absences is a decision rather than an oversight.
 
 ## Running locally
 
@@ -348,18 +388,21 @@ Browser (React)
                   └─ Prisma → PostgreSQL
 ```
 
-| Endpoint                            | Purpose                                        |
-| ----------------------------------- | ---------------------------------------------- |
-| `GET /health`                       | Infrastructure liveness: `{"status":"ok"}`     |
-| `GET /api/v1/health`                | Service identity, version and liveness         |
-| `GET /api/v1/therapists`            | A page of therapist summaries, ordered by name |
-| `GET /api/v1/therapists/:id`        | One full profile, including availability       |
-| `GET /api/v1/intake/vocabulary`     | Everything an intake may ask about             |
-| `POST /api/v1/intakes`              | Store an intake and its preferences            |
-| `POST /api/v1/matches`              | One recommendation, and the reasons            |
-| `GET /api/v1/feedback/reasons`      | The terms someone can pick from                |
-| `POST /api/v1/matches/:id/feedback` | What did not fit, about one match              |
-| `POST /api/v1/matches/:id/rematch`  | Look again, taking that into account           |
+| Endpoint                                          | Purpose                                        |
+| ------------------------------------------------- | ---------------------------------------------- |
+| `GET /health`                                     | Infrastructure liveness: `{"status":"ok"}`     |
+| `GET /api/v1/health`                              | Service identity, version and liveness         |
+| `GET /api/v1/therapists`                          | A page of therapist summaries, ordered by name |
+| `GET /api/v1/therapists/:id`                      | One full profile, including availability       |
+| `GET /api/v1/intake/vocabulary`                   | Everything an intake may ask about             |
+| `POST /api/v1/intakes`                            | Store an intake and its preferences            |
+| `POST /api/v1/matches`                            | One recommendation, and the reasons            |
+| `GET /api/v1/feedback/reasons`                    | The terms someone can pick from                |
+| `POST /api/v1/matches/:id/feedback`               | What did not fit, about one match              |
+| `POST /api/v1/matches/:id/rematch`                | Look again, taking that into account           |
+| `POST /api/v1/ai/intake/turn`                     | One turn of the intake conversation            |
+| `POST /api/v1/ai/intake/extract`                  | Read the conversation as suggestions           |
+| `GET .../matching-workspace/cases/:id/ai-summary` | A case, summarised from its evidence           |
 
 ```bash
 curl http://127.0.0.1:4000/api/v1/health
@@ -388,6 +431,25 @@ qualifying is an answer rather than an error. It is safe to call repeatedly: an 
 returned rather than recomputed, enforced by a unique index rather than by application logic. It
 answers with the **latest** pass, so after a rematch you get the person the client is on rather than
 the one they turned down.
+
+The three AI routes are the smallest contracts in the API, and their shape is the argument:
+
+- **`POST /ai/intake/turn`** takes `{ messages, known }` and answers `{ reply,
+readyToSummarise, provider }`. **Stateless** — the transcript arrives and leaves, nothing is
+  written, and it is a `POST` so nothing anybody typed can end up in a URL, a log line or a
+  `Referer`. `known` is what the intake already holds, so the assistant does not ask a question
+  that has been answered.
+- **`POST /ai/intake/extract`** takes `{ messages }` and answers `{ signals, notUnderstood,
+surplus, provider }`. Every returned key has been checked against the vocabulary in the
+  database; a key that is not real is **dropped and reported**, never fuzzy-matched. `surplus` is
+  how many understood suggestions there was no room for — a list silently cut to eight presents
+  itself as the whole of what was understood, and it is not.
+- **`GET /matching-workspace/cases/:matchId/ai-summary`** takes a path parameter and nothing
+  else. **A `GET` with no body**, so there is no field through which a caller could name a
+  therapist, an intake, a client, or a piece of text to summarise: the server loads the case and
+  builds the input. It answers `{ summary, observations, tradeoffs, provider }` as plain text,
+  and a summary mentioning anything the case does not contain is refused rather than returned
+  unchecked. It lives under the workspace namespace, so the client app cannot reach it at all.
 
 `POST /api/v1/matches/:id/feedback` takes `{ reasons, rawText? }` and marks that match `DECLINED`.
 `POST /api/v1/matches/:id/rematch` takes **no body at all** — not an empty object, and not a
@@ -425,6 +487,13 @@ Entities: `Client`, `Intake`, `ClientPreference`, `ClientAvailability`, `Therapi
 `FeedbackReason`. What each one is for, and what is deliberately missing, is in
 [`docs/domain-model.md`](docs/domain-model.md).
 
+**No migration was added in this phase, and that is a decision rather than an omission.** There
+is no `ai_logs` table, no conversation table, and no table of model output. The conversation
+lives in the browser's `sessionStorage` beside the intake draft, where someone's own words
+already lived, and is removed when the intake is sent. The case summary is recomputed on each
+request from the same rows the evidence came from, which is why it cannot go stale relative to
+the evidence beside it. There is nothing to record because nothing is retained.
+
 ## Environment configuration
 
 Copy `.env.example` to `.env` at the repo root. Every value has a safe default, so `.env` is
@@ -441,6 +510,21 @@ optional for everything except talking to a database.
 | `TEST_DATABASE_URL`   | `postgresql://wtm:wtm@127.0.0.1:5432/why_this_match_test` | api        | Test database (must differ)     |
 | `VITE_API_URL`        | `http://127.0.0.1:4000` in dev, unset in a build          | web        | API base URL                    |
 | `VITE_API_TIMEOUT_MS` | `8000`                                                    | web        | Per-request timeout             |
+| `AI_PROVIDER`         | `mock`                                                    | api        | `mock` or `openai-compatible`   |
+| `AI_API_KEY`          | _(unset)_                                                 | api        | Bearer token, server-side only  |
+| `AI_BASE_URL`         | `https://api.openai.com/v1`                               | api        | OpenAI-compatible endpoint      |
+| `AI_MODEL`            | `gpt-4o-mini`                                             | api        | Which model                     |
+| `AI_TIMEOUT_MS`       | `20000`                                                   | api        | Ceiling on one model call       |
+
+**With nothing AI-related set, both AI surfaces run on a deterministic local provider.** That is
+the default on purpose: a clone, an install and `npm run dev` give you the whole product — the
+conversation, the suggestions, the case summary — with no account and no key. To use a real
+model, set `AI_PROVIDER=openai-compatible` and `AI_API_KEY`; `AI_BASE_URL` points it at OpenAI,
+a gateway, a self-hosted vLLM, or Ollama's compatible endpoint, and no code changes.
+
+`AI_PROVIDER=openai-compatible` **without** a key refuses to start. That is the one combination
+that is a genuine mistake rather than a choice: an explicit request for a provider that cannot
+work. A _missing_ key on its own is not a mistake, it is the mock.
 
 Only `VITE_`-prefixed variables reach the browser bundle. The API refuses to start a database client
 without `DATABASE_URL` — and, if it is missing, the health endpoints still answer while the
@@ -458,6 +542,8 @@ therapist routes report `503`. Liveness should not go down because a database is
 │   │       │   ├── routes/   one module per endpoint, test beside it
 │   │       │   └── schemas/  JSON Schema + TypeScript interface per response
 │   │       ├── data/         the repository port and its Prisma adapter
+│   │       ├── ai/           the AI provider port, its two implementations,
+│   │       │                 the vocabulary validator, and the grounding check
 │   │       ├── lib/          the Prisma client
 │   │       ├── routes/       unversioned infrastructure routes
 │   │       ├── config/       environment reading and validation
@@ -484,6 +570,8 @@ therapist routes report `503`. Liveness should not go down because a database is
 │   ├── matching-engine.md      the pipeline, the weights, availability, evidence, limits
 │   ├── rematching.md           feedback, signals, exclusions, history, what changed
 │   ├── human-matching.md       the review workflow, the decision, the audit trail
+│   ├── ai.md                   the AI layer: the provider abstraction, what it
+│   │                           may do, the privacy boundary, failure behaviour
 │   ├── design-system.md        the visual language
 │   └── screenshots/
 └── package.json              npm workspaces root
@@ -501,6 +589,11 @@ therapist routes report `503`. Liveness should not go down because a database is
   removed, the feedback-to-signal mapping and what it must never become, exclusion behaviour and
   scope, the rematch lifecycle, the matching history, how "what changed" decides what it may say,
   the no-match case, the API contract, and the limitations.
+- [`docs/ai.md`](docs/ai.md) — **the AI layer**: the one rule it exists to protect, the two
+  surfaces, the provider abstraction and why the mock is a real implementation rather than a
+  stub, structured output and what gets rejected, the safety boundary and why it is a redirect
+  rather than a triage system, the privacy boundary and what is never stored or logged, the
+  grounding check and what it does _not_ check, failure behaviour, and future improvements.
 - [`docs/matching-engine.md`](docs/matching-engine.md) — the ten-stage pipeline, how requirements
   are derived, the weights and why they are not clinically validated, the timezone-correct
   availability algorithm, the evidence model, how explanations are generated, how reasons are
@@ -563,6 +656,33 @@ therapist routes report `503`. Liveness should not go down because a database is
   the matching journey. A therapist declined on one search is perfectly recommendable to somebody
   else, or to the same person on a different intake later — otherwise the pool would quietly shrink
   each time someone came back, for reasons they could not see and could not undo.
+
+### And, for the AI layer
+
+- **No conversation is stored.** The transcript lives in `sessionStorage` beside the intake draft
+  and is removed when the intake is sent. A test asserts a stored transcript holds _only_ `role`
+  and `text` — no identifiers, no provider name, and **no suggestions**, because a stored
+  suggestion would be a stored _inference about someone_.
+- **No model output is stored either.** There is no `ai_logs` table and no table of summaries.
+  The case summary is recomputed on each request from the same rows the evidence came from, so it
+  cannot go stale relative to the evidence beside it.
+- **Free text is never logged.** Verified, not asserted: the AI routes are built with a log sink
+  in a test and the output read, on both the provider-failure path and the validation-rejection
+  path. Neither contains a word of what was typed. (Fastify's validation error names the offending
+  _field_, not its value — checked before the schema was written rather than assumed.)
+- **The case summariser is never shown anyone's words.** `AiCaseContext` has no field for the
+  intake note, a feedback note, a matcher's note, a biography, a client identifier, a score or a
+  rank — so a provider _cannot be shown_ them, rather than merely choosing not to. The
+  client's free text stays behind Phase 7's separate, opt-in request, and an AI summary is not a
+  way around it.
+- **The key is server-side and appears in three files.** The environment reader, the factory, and
+  the one provider that uses it. Not prefixed `VITE_`, so it is not in the bundle; a structural
+  test asserts it does not appear in the validator, the safety guard, the grounding check or the
+  routes — the files a request flows through.
+- **A mention of self-harm ends the conversation** with a pointer to real support, and the reply
+  is a fixed string with no model involved. **This is a redirect, not a triage system**: it does
+  not evaluate level, history, intent or immediacy, and it points at an international directory
+  rather than guessing a national number for a country we do not know.
 
 ## Accessibility
 
@@ -631,8 +751,8 @@ npm run build        # type-check and build both workspaces
 
 | Suite    | Count | What only it can catch                                  |
 | -------- | ----- | ------------------------------------------------------- |
-| API unit | 317   | What the endpoints refuse, and what they refuse to send |
-| Web      | 435   | What a person sees, and in what order they see it       |
+| API unit | 487   | What the endpoints refuse, and what they refuse to send |
+| Web      | 525   | What a person sees, and in what order they see it       |
 | Database | 81    | Whether the _history_ survives being written            |
 
 The database suite is mostly read-back rather than assertions about return values. A service
@@ -680,9 +800,24 @@ are principled and which are chosen.
 `location-mismatch` was removed from the feedback vocabulary — offering a reason the system
 cannot act on is worse than offering none.
 
+**The grounding check is unmeasured at volume.** `assertGroundedIn` refuses a summary that
+mentions anything the case does not contain, and that is a strict check: a curated list of
+ordinary reporting vocabulary is the limit of it, and a word nobody anticipated is refused. That
+is the intended direction — a lost summary is a nuisance, a plausible-sounding fabricated one is
+not recoverable — but the false-positive rate has not been measured against real model output at
+scale, and it should be before this is relied on. It is currently a backstop, not the primary
+control; the primary control is that the provider is never shown a biography, a score or free
+text in the first place.
+
+**The mock does not understand metaphor.** It matches the words someone uses _about_ their
+preferences against the names in the vocabulary. It reads "work has been stressful" and "my
+parents keep asking when I'll settle down" correctly, and it does **not** read "I've been a wreck
+since my mother died" as grief and loss. It will not pretend to. That limitation is the reason
+the provider abstraction exists, and it is why the real provider is not optional in a deployment
+that wants the feature to work.
+
 **Deliberately not built at all:** accounts, authentication, payments, scheduling, a
-therapist-facing dashboard, messaging, video, notifications, analytics, and any AI service of
-any kind.
+therapist-facing dashboard, messaging, video, notifications, and analytics.
 
 ## Notes and licences
 
@@ -882,7 +1017,38 @@ Delivered so far:
   what it is doing without pretending the work takes longer than it does.
 - Tests, strict TypeScript, ESLint (type-aware + jsx-a11y), Prettier, and written documentation.
 
+### Phase 9 — the AI layer
+
+- **Two surfaces, both of which are decision _support_.** An intake companion that reads
+  something written in plain language back as answers to the existing questions, and a case
+  summary that gives a matcher a second reading of the evidence beside them. Neither writes
+  anything: applying a suggestion goes through the same `toggle*` functions the questions use, and
+  the case panel has no control that could touch a decision.
+- **The engine is unchanged, and the boundary is structural.** Not one line of `data/matching/`
+  was touched. `AiProvider`'s output types have no field for a therapist, a score or a rank; the
+  AI layer imports no matching store; and the case context has no field for anyone's free text, so
+  a provider _cannot be shown_ it rather than choosing not to. A structural test asserts each of
+  these, and was verified by breaking the three most important and confirming the test fails.
+- **The product works with no key at all.** With nothing configured, a deterministic local
+  provider answers both surfaces — and it is a real implementation, not a stub: it reads the
+  vocabulary from the database and matches a person's words against it. Its honest limit is that it
+  does not understand metaphor, which is the entire reason the abstraction exists.
+- **Nothing is retained.** No conversation table, no `ai_logs`, no table of summaries. The
+  transcript lives in the browser beside the intake draft and is removed when the intake is sent;
+  the case summary is recomputed per request from the rows the evidence came from.
+- **A guard, not a prompt.** A request for diagnosis or treatment is answered without a model
+  being involved, and a mention of self-harm ends the conversation with a pointer to real support.
+  Thirteen ordinary sentences — including "I've been told I have anxiety" and "I have never done
+  therapy before" — are pinned as _allowed_, because a guard that fires on "therapy" would shut
+  down the conversation it exists to have.
+- **A summary that cannot be checked is not shown.** Every content word must be traceable to a
+  field in the case, and figures, ranks, verdicts and clinical language are refused outright. It
+  errs towards refusal, because a lost summary is a nuisance and a plausible-sounding fabricated
+  one is not recoverable.
+- Tests, strict TypeScript, ESLint (type-aware + jsx-a11y), Prettier, and
+  [`docs/ai.md`](docs/ai.md).
+
 Deliberately **not** built: geographic matching, clinical or diagnostic matching, accounts,
 authentication, payments, scheduling, a therapist-facing dashboard, messaging, video, notifications,
-analytics, and any AI service of any kind. The internal ordering figure is not clinically validated
-— it is a documented prototype heuristic, and the document says so.
+and analytics. The internal ordering figure is not clinically validated — it is a documented
+prototype heuristic, and the document says so.

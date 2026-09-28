@@ -150,11 +150,14 @@ Only what the product actually needs. Each is small, single-purpose, and token-d
 | `ToggleAll`                 | A plain button that shows or hides a list, saying how much is behind it             |
 | `IntakeProgress`            | A part of the flow named in small capitals, and the hairlines showing where you are |
 | `ProfileSection`            | One labelled, hairline-divided block of a profile, with a real heading              |
-| `ProfileSection`            | One labelled, hairline-divided block of a profile, with a real heading              |
 | `LoadingNote`               | One quiet line and a hairline that breathes. The loading state for the product.     |
 | `ErrorNote`                 | A plain-language title, one way forward, and the technical detail tucked away       |
 | `DevStatus`                 | Development-only proof that the client can reach the API. Never in a build.         |
 | `SiteHeader` / `SiteFooter` | A name, your position, and a footnote. Not chrome — a frame.                        |
+| `ConversationLog`           | A transcript as prose: one column, a quiet speaker marker, no bubbles. See below    |
+| `Composer`                  | One field and a send. Enter sends; Shift+Enter breaks a line                        |
+| `SuggestionList`            | One suggestion, its stated reason, and Keep / Change / Not quite                    |
+| `CaseSummaryPanel`          | The matcher's AI perspective. An offer, a summary, and a boundary. See below        |
 
 Three decisions worth stating:
 
@@ -166,6 +169,63 @@ Three decisions worth stating:
 - **The journey indicator is a position, not a progress bar.** It is not interactive, makes no
   claim about how far along anyone is, and carries the same information as text for anyone who
   cannot see the marks.
+
+### A conversation is not a chat log
+
+Phase 9 added a conversational intake, and the visual decision that mattered most was what
+**not** to build.
+
+Every convention a chat interface has — two columns, rounded tails, alternating alignment, a
+tinted bubble per side — is a way of saying _this is a messaging app_. This is not one. It is an
+interview that happens to be typed, and a question is answered better by a question than by a
+bubble. Somebody telling a stranger something difficult is not in a conversation with an equal,
+and a two-column layout asserts that they are whatever the words happen to say.
+
+So the transcript is **a single column of prose with a quiet speaker marker**, the way a
+transcript in a book is set: a `3.25rem` label column reading `You` or `Assistant`, then the turn
+at the reading measure. Hairlines between turns. No bubbles, no tails, no avatars, no timestamps,
+and no colour difference between speakers beyond the label itself.
+
+What is deliberately absent from the whole surface: a launcher bubble, a floating widget, a
+sparkle icon, a purple or blue accent, a glowing border, an emoji, and any panel that wears the
+word _AI_ as decoration. The assistant is referred to as _the assistant_ or _the conversation
+assistant_ in the interface, which is both more accurate and quieter than a label on a badge.
+
+Three more decisions, each found by looking at the rendered page:
+
+- **A suggestion is body-size serif, not heading-size.** Applying the Phase 8 rule — _large when
+  it is the subject of the page_ — the subject of `/intake/companion` is the conversation. A
+  suggestion is one line in it. Heading-size here would give the page five competing focal
+  points.
+- **The confidence hint is a phrase, not a meter.** "a possible read", "a long way from certain".
+  Three levels is what the assistant can actually distinguish; a fourth would be a number nobody
+  could defend, and a bar would be a chart, which this product does not have.
+- **The reading measure is the same as everywhere else.** `max-w-measure`, nothing wider. Prose is
+  comfortable at about sixty-five characters, and a conversational turn is prose.
+
+### The AI perspective is a panel, not a product
+
+The matcher's case summary is the second AI surface, and the rule that keeps it inside this
+language is the same one the workspace already follows: **the absences are what matter.**
+
+Absent: a chat anything, an input, a conversation, a floating control, a badge, a "copilot"
+framing, a gradient panel, and any number about a person. The panel has exactly one control when
+a summary is on screen — _write it again_ — because the only actions available are asking and
+not asking.
+
+Present: the same warm canvas, the same hairlines, the same serif heading, the same
+`eyebrow` + prose structure as every other section, the same loading line, the same error
+wording as the rest of the workspace.
+
+Two decisions worth recording:
+
+- **It is an offer, not a panel that loads.** "Write a summary" is a button, and the panel is
+  unremarkable until it is pressed. A summary that arrives on its own is a paragraph that says
+  what matters, sitting where a matcher reads first — which is how a second reading becomes the
+  first authority.
+- **An empty list is stated, not padded.** Where there are no genuine tradeoffs, the panel says
+  so in a sentence rather than rendering an empty section. A heading with nothing under it reads
+  as a loading failure.
 
 ### Placeholders and empty states
 
@@ -316,3 +376,25 @@ Rules:
   (single column, tighter label tracking, narrower journey marks), not a shrunken desktop.
 - Respects `prefers-reduced-motion`. Dark mode is not offered; `color-scheme` is declared `light`
   so form controls and scrollbars match the canvas.
+
+### The conversation, specifically
+
+- **The live region holds only what has just arrived.** `role="log"`, `aria-live="polite"`,
+  `aria-relevant="additions"`, and the region's contents are the messages after an index rather
+  than the whole transcript. A region containing everything re-announces the whole conversation
+  on every turn, which is worse than saying nothing.
+- **The greeting is not announced twice.** It is on the page when the route opens and read in the
+  visual order, so the first index is `1`.
+- **Enter sends, Shift+Enter breaks a line**, stated through the field's own
+  `aria-describedby` — available when the label is read rather than only to somebody hunting.
+- **Suggestions are toggles.** Real `<button>`s with `aria-pressed`, so a kept state is audible
+  and is not communicated by underline weight alone.
+- **A rejected suggestion stays on the page**, dimmed, with an Undo. A refusal you cannot take
+  back teaches people not to use the button.
+- **The composer is the first tab stop.** The greeting is prose, not a control, and a launcher
+  before it would be the wrong first thing to reach.
+- **A failed turn keeps the words.** The message is on screen, the error is announced with
+  `role="alert"`, and the way to the questions is always present — more than one way, so nobody
+  is left with a single control that did not work.
+- **The case summary panel announces a refusal** rather than leaving an absent section, which
+  reads as a page that failed to load.
