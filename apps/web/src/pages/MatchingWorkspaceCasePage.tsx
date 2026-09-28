@@ -690,8 +690,11 @@ function Choice({
  * client rather than from this page.
  */
 function JourneySection({ detail }: { readonly detail: CaseDetail }) {
-  const feedbackNames: Record<string, string> = {};
-
+  // The reasons arrive as words, resolved server-side. This used to build an empty lookup
+  // and fall through to the key, which meant a matcher read
+  // "The client said it didn't fit: communication-mismatch" on the one page whose purpose is
+  // to be readable. The vocabulary was never in the payload to resolve against — the fix had
+  // to be on the server, not here.
   return (
     <Section title="How this got here" id="journey">
       <p className="text-small text-ink-muted max-w-measure mb-8">
@@ -699,11 +702,7 @@ function JourneySection({ detail }: { readonly detail: CaseDetail }) {
         evidence for each of those suggestions is on the case above.
       </p>
 
-      <JourneyTimeline
-        steps={detail.journey}
-        feedbackNames={feedbackNames}
-        currentMatchId={detail.summary.matchId}
-      />
+      <JourneyTimeline steps={detail.journey} currentMatchId={detail.summary.matchId} />
     </Section>
   );
 }

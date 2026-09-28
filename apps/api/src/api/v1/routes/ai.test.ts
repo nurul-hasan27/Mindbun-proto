@@ -507,7 +507,9 @@ function fakeCase(): CaseDetail {
       matchId: '0199a1c2-3d4e-5f60-8712-93a4b5c6d7e8',
       therapist: therapist('t1', 'Ananya Rao'),
       shared: [{ key: 'LANGUAGE', sentence: 'They speak Hindi, one of the languages you chose.' }],
-      notOffered: [{ category: 'Style', names: ['Exploratory'] }],
+      // The stored code, not the display label. `buildCaseContext` translates it, and a
+      // fixture that arrived pre-translated would hide the fact that it ever needed to.
+      notOffered: [{ category: 'COMMUNICATION_STYLE', names: ['Exploratory'] }],
     },
     alternatives: [],
     selectableMatchIds: ['0199a1c2-3d4e-5f60-8712-93a4b5c6d7e8'],
@@ -895,7 +897,7 @@ describe('privacy', () => {
 });
 
 describe('buildCaseContext', () => {
-  it('resolves prior feedback to reason names, never to a client’s own sentence', () => {
+  it('carries what the client said in their own words, never their own sentence', () => {
     const detail = fakeCase();
     const withJourney = {
       ...detail,
@@ -904,18 +906,52 @@ describe('buildCaseContext', () => {
           attempt: 1,
           matchId: CASE_ID,
           systemSuggestedName: 'Someone Else',
-          clientFeedback: ['NOT_RIGHT_FIT'],
+          clientFeedback: ['communication-mismatch'],
+          clientFeedbackNames: ['The communication style didn’t feel right.'],
           decision: null,
           selectedName: null,
           status: 'DECLINED',
         },
       ],
-      decisionReasons: [{ key: 'NOT_RIGHT_FIT', name: 'Not the right fit', description: '' }],
     } as unknown as CaseDetail;
 
     const context = buildCaseContext(withJourney);
 
-    expect(context.priorFeedback).toEqual(['Not the right fit']);
+    expect(context.priorFeedback).toEqual(['The communication style didn’t feel right.']);
+
+    // And nothing that could be a sentence they typed. The free text lives behind
+    // `readClientsWords`, a separate opt-in, and this path never asks for it.
+    expect(JSON.stringify(context)).not.toMatch(/feedbackNotes|intakeNote|rawText/);
+  });
+
+  it('says what the case says, rather than the key it is stored under', () => {
+    // The control for the test above, and the bug this replaced: the feedback keys were
+    // looked up in the *decision* vocabulary, which is a different table, so nothing matched
+    // and the bare key — `communication-mismatch` — reached the summary as prose. The
+    // grounding check then refused the whole summary for a reason no reader could act on.
+    const detail = fakeCase();
+    const withJourney = {
+      ...detail,
+      journey: [
+        {
+          attempt: 1,
+          matchId: CASE_ID,
+          systemSuggestedName: 'Someone Else',
+          clientFeedback: ['communication-mismatch'],
+          clientFeedbackNames: ['The communication style didn’t feel right.'],
+          decision: null,
+          selectedName: null,
+          status: 'DECLINED',
+        },
+      ],
+      // The decision vocabulary, which does not contain the feedback key — exactly as in
+      // production, where the two are separate tables.
+      decisionReasons: [
+        { key: 'better-communication-style', name: 'Better communication style', description: '' },
+      ],
+    } as unknown as CaseDetail;
+
+    expect(JSON.stringify(buildCaseContext(withJourney))).not.toContain('communication-mismatch');
   });
 
   it('offers only the alternatives a matcher may actually choose', () => {
@@ -947,6 +983,42 @@ describe('buildCaseContext', () => {
     // Offering a tradeoff against someone the server will refuse is offering a decision that
     // does not exist.
     expect(context.alternatives).toHaveLength(1);
+  });
+
+  it('translates a stored family code into words, because a summary is prose', () => {
+    const detail = fakeCase();
+    const withGap = {
+      ...detail,
+      suggestion: {
+        ...detail.suggestion,
+        notOffered: [{ category: 'AREA_OF_WORK', names: ['Work stress'] }],
+      },
+    } as unknown as CaseDetail;
+
+    const context = buildCaseContext(withGap);
+    const category = context.suggestion.notOffered[0]?.category ?? '';
+
+    // `AREA_OF_WORK` in a sentence is a bug report, and it tokenises to something no prose
+    // contains, so a summary quoting it verbatim would be refused for a reason nobody could
+    // act on. The workspace resolves the same codes the same way.
+    expect(category).not.toBe('AREA_OF_WORK');
+    expect(category).toMatch(/[a-z]/);
+    expect(category).toBe('Work with');
+  });
+
+  it('leaves an unrecognised family as it found it rather than guessing at a label', () => {
+    const detail = fakeCase();
+    const withGap = {
+      ...detail,
+      suggestion: {
+        ...detail.suggestion,
+        notOffered: [{ category: 'SOMETHING_NEW', names: ['A thing'] }],
+      },
+    } as unknown as CaseDetail;
+
+    // Guessing would be worse than passing it through: a wrong label in a summary reads as
+    // fact, and the code at least says plainly that it was not recognised.
+    expect(buildCaseContext(withGap).suggestion.notOffered[0]?.category).toBe('SOMETHING_NEW');
   });
 
   it('repeats no field that could carry a client’s words', () => {

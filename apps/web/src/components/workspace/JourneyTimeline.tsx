@@ -18,13 +18,11 @@ import { WorkspaceEyebrow } from './WorkspaceColumns';
  */
 interface JourneyTimelineProps {
   readonly steps: readonly JourneyStep[];
-  /** Reason keys by key, for turning the client's feedback into words. */
-  readonly feedbackNames: Readonly<Record<string, string>>;
   /** The case being reviewed, so the current pass can be named rather than inferred. */
   readonly currentMatchId: string;
 }
 
-export function JourneyTimeline({ steps, feedbackNames, currentMatchId }: JourneyTimelineProps) {
+export function JourneyTimeline({ steps, currentMatchId }: JourneyTimelineProps) {
   if (steps.length === 0) {
     return null;
   }
@@ -67,7 +65,7 @@ export function JourneyTimeline({ steps, feedbackNames, currentMatchId }: Journe
             {step.clientFeedback.length > 0 && (
               <p className="text-small text-ink-muted mt-2">
                 <span className="text-ink">The client said it didn’t fit: </span>
-                {step.clientFeedback.map((key) => feedbackNames[key] ?? key).join(', ')}.
+                {step.clientFeedbackNames.join(', ')}.
               </p>
             )}
 

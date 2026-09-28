@@ -85,8 +85,21 @@ export interface JourneyStep {
   /** The pass's recommended match, whether or not anyone is looking at it now. */
   readonly matchId: string;
   readonly systemSuggestedName: string;
-  /** The reason keys the client gave, or empty when they said nothing. */
+  /**
+   * The reason keys the client gave, or empty when they said nothing.
+   *
+   * The key is the truth, and it is what a profile is compared against. It is *also* what a
+   * key looks like on screen, which is why `clientFeedbackNames` exists beside it.
+   */
   readonly clientFeedback: readonly DecisionReasonKey[];
+  /**
+   * The same reasons in the client's own words.
+   *
+   * Resolved server-side from the feedback vocabulary, because the client cannot: the
+   * vocabulary was never in the case payload, so a matcher was reading
+   * `communication-mismatch` on a page whose whole purpose is to be readable.
+   */
+  readonly clientFeedbackNames: readonly string[];
   /** The decision for this pass, when one has been made. */
   readonly decision: StoredDecision | null;
   /** Who the selected candidate is, when a decision exists. */

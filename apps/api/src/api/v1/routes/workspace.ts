@@ -1,5 +1,6 @@
 import type { FastifyPluginCallback } from 'fastify';
 import { isUuid } from '../../../data/validators.js';
+import type { FeedbackRepository } from '../../../data/matching/feedbackRepository.js';
 import type { MatchRepository } from '../../../data/matching/matchRepository.js';
 import type { TherapistRepository } from '../../../data/therapists/therapistRepository.js';
 import {
@@ -104,8 +105,9 @@ export function buildWorkspaceRoutes(
   workspace: WorkspaceRepository,
   matches: MatchRepository,
   therapists: TherapistRepository,
+  feedback: FeedbackRepository,
 ): FastifyPluginCallback {
-  const deps: WorkspaceDeps = { workspace, matches, therapists };
+  const deps: WorkspaceDeps = { workspace, matches, therapists, feedback };
 
   return (app, _options, done) => {
     app.get(

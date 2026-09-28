@@ -9,6 +9,7 @@ import type {
   SuggestedCandidate,
 } from './decisionTypes.js';
 import type { MatchEvidenceInput } from './matchingTypes.js';
+import type { FeedbackRepository } from './feedbackRepository.js';
 import type { MatchRepository } from './matchRepository.js';
 import type { StoredIntake } from './signals.js';
 import type { TherapistRepository } from '../therapists/therapistRepository.js';
@@ -100,6 +101,14 @@ export interface WorkspaceDeps {
   readonly workspace: WorkspaceRepository;
   readonly matches: MatchRepository;
   readonly therapists: TherapistRepository;
+  /**
+   * The feedback vocabulary, read to put the client's own words on the timeline.
+   *
+   * Added in Phase 9, and the comment on `toJourney` says why: the client could not resolve
+   * these keys because they were never sent, so the timeline was showing raw keys. Read for
+   * its names only — nothing here reads the client's free text.
+   */
+  readonly feedback: FeedbackRepository;
 }
 
 /**
@@ -400,11 +409,32 @@ async function toJourney(
     }),
   );
 
+  // What the client said about each earlier pass, in the client's own wording rather than
+  // as stored keys.
+  //
+  // The keys still travel, because a key is the truth a profile's attributes are compared
+  // against. But a matcher reading `communication-mismatch` has been shown a database key,
+  // and the phase 7 timeline was doing exactly that: it built an empty lookup and fell
+  // through to the key, so the sentence read "In an earlier search they said:
+  // communication-mismatch." The client could not fix that on its own — the vocabulary was
+  // never in the payload — so it is resolved here, where the store is.
+  const feedbackNames = new Map<string, string>();
+
+  try {
+    for (const reason of await deps.feedback.readReasons()) {
+      feedbackNames.set(reason.key, reason.name);
+    }
+  } catch {
+    // An unreachable vocabulary is not a reason to fail a case read. The keys still travel
+    // and the client is the fallback, which gives a worse sentence rather than no page.
+  }
+
   return journey.map((step) => ({
     attempt: step.attempt,
     matchId: step.matchId,
     systemSuggestedName: names.get(step.recommendedTherapistId) ?? 'a therapist',
     clientFeedback: step.feedbackReasonKeys,
+    clientFeedbackNames: step.feedbackReasonKeys.map((key) => feedbackNames.get(key) ?? key),
     decision: step.decision,
     selectedName:
       step.selectedTherapistId === null

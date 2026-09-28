@@ -1,6 +1,7 @@
 import type { AiCaseContext } from './aiProvider.js';
 import type { CaseDetail } from '../data/matching/decisionTypes.js';
 import { familyLabel } from '../data/matching/notOffered.js';
+import { MATCH_CATEGORIES } from '../data/matching/matchingTypes.js';
 import type { MatchCategory } from '../data/matching/matchingTypes.js';
 
 /**
@@ -82,6 +83,35 @@ interface NamedNeed {
 }
 
 /**
+ * The family a candidate does not carry, as a label rather than a code.
+ *
+ * `notOffered` groups absences by `MatchCategory`, so what arrives is `AREA_OF_WORK`. That
+ * is a storage key, and a summary is prose: "does not carry Work stress (area of work)" is
+ * a sentence, "does not carry Work stress (AREA_OF_WORK)" is a bug report. The workspace
+ * resolves the same codes through the same table, so a matcher reading both sees one set of
+ * words.
+ *
+ * The conversion is also what keeps the grounding check honest. `AREA_OF_WORK` tokenises to
+ * something no sentence would contain, so a summary quoting the code verbatim is refused —
+ * correctly, and for a reason that is only visible once the code has been translated.
+ */
+function gaps(
+  notOffered: readonly { readonly category: string; readonly names: readonly string[] }[],
+): readonly { readonly category: string; readonly names: readonly string[] }[] {
+  return notOffered.map((entry) => ({
+    category: labelFor(entry.category),
+    names: entry.names,
+  }));
+}
+
+/** The display label for a stored family code, falling back to the code itself. */
+function labelFor(category: string): string {
+  return (MATCH_CATEGORIES as readonly string[]).includes(category)
+    ? familyLabel(category as MatchCategory)
+    : category;
+}
+
+/**
  * The context a provider is given for a case.
  *
  * Takes a `CaseDetail` that must have been fetched **without** `revealWords`, which is the
@@ -108,16 +138,17 @@ export function buildCaseContext(
     ...named(detail.needs.sessionFormats, NEED_CATEGORIES.sessionFormats),
   ];
 
-  // A structured reason key, resolved to its name. The client's own sentence about why they
-  // passed on someone is *not* here and cannot be reached from here.
-  const priorFeedback = detail.journey
-    .flatMap((step) => step.clientFeedback)
-    .map((key) => {
-      const reason = detail.decisionReasons.find((entry) => entry.key === key);
-      // A key with no name means the vocabulary changed. A bare key is better than a guess
-      // at what it meant, and it is still a real stored value rather than something invented.
-      return reason?.name ?? key;
-    });
+  // What the client said about earlier passes, in their words.
+  //
+  // `clientFeedbackNames` rather than the keys, which the workspace service resolves. Two
+  // reasons: a summary is prose, and a key inside a sentence reads as a bug report; and the
+  // decision vocabulary is not the feedback vocabulary, so looking a feedback key up in
+  // `decisionReasons` finds nothing and leaves the bare key — which is exactly what the
+  // first version did, and what the grounding check then correctly refused.
+  //
+  // The client's own sentence about *why* is not here and cannot be reached from here: that
+  // is `readClientsWords`, a separate opt-in, and this path never asks for it.
+  const priorFeedback = detail.journey.flatMap((step) => step.clientFeedbackNames);
 
   return {
     needs,
@@ -125,7 +156,7 @@ export function buildCaseContext(
     suggestion: {
       name: detail.suggestion.therapist.displayName,
       reasons: detail.suggestion.shared.map((entry) => entry.sentence),
-      notOffered: detail.suggestion.notOffered,
+      notOffered: gaps(detail.suggestion.notOffered),
     },
     // Only the eligible ones. A candidate the engine set aside is one no matcher may
     // choose, so naming it in a list of tradeoffs would be offering a decision that the
@@ -137,7 +168,7 @@ export function buildCaseContext(
       .map((candidate) => ({
         name: candidate.therapist.displayName,
         reasons: candidate.shared.map((entry) => entry.sentence),
-        notOffered: candidate.notOffered,
+        notOffered: gaps(candidate.notOffered),
       })),
     priorFeedback: [...new Set(priorFeedback)],
   };

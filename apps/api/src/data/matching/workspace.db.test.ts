@@ -37,7 +37,13 @@ const therapists = createPrismaTherapistRepository(prisma);
 const intakes = createPrismaIntakeRepository(prisma);
 const workspace = createPrismaWorkspaceRepository(prisma);
 
-const deps: WorkspaceDeps = { workspace, matches, therapists };
+/**
+ * The feedback store is here for its vocabulary, so the timeline can show the client's
+ * reasons in words. A real Prisma repository, because the reason names come from the same
+ * seeded table the journey keys reference — a fixture that resolved them itself would pass
+ * whether or not the lookup worked.
+ */
+const deps: WorkspaceDeps = { workspace, matches, therapists, feedback };
 
 /**
  * The demo scenario: Hindi, exploratory, the Indian diaspora, weekday evenings.
@@ -559,6 +565,19 @@ describe('a case that has been through rematching', () => {
       clientFeedback: ['communication-mismatch', 'different-experience'],
       decision: null,
     });
+
+    /*
+     * The same reasons, in the client's own words.
+     *
+     * Read back from the database rather than asserted against a fixture, because the bug
+     * this fixes was exactly a lookup that could silently find nothing: the interface built
+     * an empty map and fell through to the key, and nothing failed. A test that supplied the
+     * names itself would have passed with the lookup still broken.
+     */
+    expect(plain.journey[0]?.clientFeedbackNames).toEqual([
+      'The communication style didn’t feel right.',
+      'I wanted someone with different experience.',
+    ]);
     expect(plain.summary.hasHistory).toBe(true);
     // Free text is not in the payload unless it was asked for, and "there is none" and
     // "withheld" are the same absence.

@@ -70,7 +70,12 @@ export const v1Routes: FastifyPluginCallback<FastifyPluginOptions & V1RouteOptio
   // The reviewer's side, namespaced and separate. It reads the engine's records and adds a
   // decision beside them; it has no method that could write a `Match`, which is what keeps
   // the audit trail from being a promise rather than a property of the code.
-  app.register(buildWorkspaceRoutes(options.workspace, options.matches, options.therapists));
+  // The feedback store is here for its *vocabulary*, not its data: the case timeline and the
+  // AI case summary both need the client's reasons in words, and the keys alone are not
+  // readable. Nothing in either reads free text.
+  app.register(
+    buildWorkspaceRoutes(options.workspace, options.matches, options.therapists, options.feedback),
+  );
 
   // The AI layer. Two surfaces, and they are deliberately not the same route builder.
   //
@@ -87,6 +92,7 @@ export const v1Routes: FastifyPluginCallback<FastifyPluginOptions & V1RouteOptio
       workspace: options.workspace,
       matches: options.matches,
       therapists: options.therapists,
+      feedback: options.feedback,
       ai,
     }),
   );

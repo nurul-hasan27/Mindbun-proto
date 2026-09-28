@@ -115,8 +115,20 @@ export interface JourneyStep {
   readonly attempt: number;
   readonly matchId: string;
   readonly systemSuggestedName: string;
-  /** Reason keys the client gave. Keys, so each traces to a rule. */
+  /**
+   * Reason keys the client gave. Keys, so each traces to a rule and a profile can be
+   * compared against it. It is also what a key looks like on screen, which is why the words
+   * are here too.
+   */
   readonly clientFeedback: readonly string[];
+  /**
+   * The same reasons in the client's own words, resolved server-side.
+   *
+   * This payload never carried the feedback vocabulary, so the timeline used to fall through
+   * to the key and show a matcher `communication-mismatch` on the one page in the product
+   * whose purpose is to be readable.
+   */
+  readonly clientFeedbackNames: readonly string[];
   readonly decision: RecordedDecision | null;
   readonly selectedName: string | null;
   readonly status: 'ELIGIBLE' | 'INELIGIBLE' | 'RECOMMENDED' | 'DECLINED';
@@ -325,7 +337,10 @@ function isJourneyStep(value: unknown): value is JourneyStep {
     isRecord(value) &&
     typeof value['attempt'] === 'number' &&
     typeof value['systemSuggestedName'] === 'string' &&
-    Array.isArray(value['clientFeedback'])
+    Array.isArray(value['clientFeedback']) &&
+    // Accepted without the names, so this client can talk to a server from the previous
+    // phase. The interface then shows keys, which is worse and still correct.
+    (value['clientFeedbackNames'] === undefined || Array.isArray(value['clientFeedbackNames']))
   );
 }
 

@@ -126,6 +126,15 @@ const journeyStepSchema = {
     systemSuggestedName: { type: 'string' },
     /** Reason keys the client gave about this pass. Keys, so they trace to a rule. */
     clientFeedback: { type: 'array', items: { type: 'string' } },
+    /**
+     * The same reasons, in the client's own words.
+     *
+     * Added in Phase 9. The keys above are what a profile is compared against, so they stay;
+     * but they are also what a matcher was being shown on screen, because this payload never
+     * carried the vocabulary to resolve them against. Both travel, and the interface reads
+     * the words.
+     */
+    clientFeedbackNames: { type: 'array', items: { type: 'string' } },
     decision: nullableDecisionSchema,
     selectedName: { type: ['string', 'null'] },
     status: { type: 'string', enum: ['ELIGIBLE', 'INELIGIBLE', 'RECOMMENDED', 'DECLINED'] },
@@ -135,6 +144,7 @@ const journeyStepSchema = {
     'matchId',
     'systemSuggestedName',
     'clientFeedback',
+    'clientFeedbackNames',
     'decision',
     'selectedName',
     'status',
@@ -427,6 +437,7 @@ export interface CaseDetailResponse {
     readonly matchId: string;
     readonly systemSuggestedName: string;
     readonly clientFeedback: readonly string[];
+    readonly clientFeedbackNames: readonly string[];
     readonly decision: DecisionResponse | null;
     readonly selectedName: string | null;
     readonly status: 'ELIGIBLE' | 'INELIGIBLE' | 'RECOMMENDED' | 'DECLINED';
