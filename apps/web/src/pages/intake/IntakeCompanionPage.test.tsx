@@ -214,20 +214,20 @@ describe('the conversation', () => {
     expect(turn).not.toHaveBeenCalled();
   });
 
-  it('sends a message and shows the reply', async () => {
+  it('continues past a note and shows the reply', async () => {
     const user = userEvent.setup();
     renderCompanion();
     await ready();
 
     const field = screen.getByRole('textbox');
     await user.type(field, 'Work has been stressful lately.');
-    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
 
     expect(await screen.findByText('Work has been stressful lately.')).toBeInTheDocument();
     expect(await screen.findByText('What is the harder part of it?')).toBeInTheDocument();
   });
 
-  it('sends on Enter and starts a new line on Shift+Enter', async () => {
+  it('continues on Enter and starts a new line on Shift+Enter', async () => {
     const user = userEvent.setup();
     renderCompanion();
     await ready();
@@ -243,26 +243,26 @@ describe('the conversation', () => {
     expect(turn).toHaveBeenCalledOnce();
   });
 
-  it('clears the field once sent, and keeps the words in the transcript', async () => {
+  it('clears the page once continued, and keeps the words in the journal', async () => {
     const user = userEvent.setup();
     renderCompanion();
     await ready();
 
     const field = screen.getByRole('textbox');
     await user.type(field, 'Something I want on the record.');
-    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
 
     await screen.findByText('Something I want on the record.');
     expect(field).toHaveValue('');
   });
 
-  it('makes exactly one request per message sent', async () => {
+  it('makes exactly one request per note continued', async () => {
     const user = userEvent.setup();
     renderCompanion();
     await ready();
 
     await user.type(screen.getByRole('textbox'), 'One thought.');
-    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
     await screen.findByText('One thought.');
 
     // The performance rule: a turn costs one call, made when a person presses send.
@@ -275,7 +275,7 @@ describe('the conversation', () => {
     await ready();
 
     await user.type(screen.getByRole('textbox'), 'A thought.');
-    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
     await screen.findByText('What is the harder part of it?');
 
     const log = document.querySelector('[role="log"]');
@@ -299,18 +299,18 @@ describe('the suggestions', () => {
       screen.getByRole('textbox'),
       'Work has been stressful and I want to talk it through.',
     );
-    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
     await screen.findByText('What is the harder part of it?');
 
     await user.click(screen.getByRole('button', { name: /show me what you understood/i }));
     // The results block's own heading, whatever it is currently called.
     await screen.findByRole('heading', {
       level: 2,
-      name: /here’s what i heard|what i could place/i,
+      name: /what we understood|what we could place/i,
     });
   }
 
-  it('shows what it heard with the reasoning, and saves nothing yet', async () => {
+  it('shows what it understood with the reasoning, and saves nothing yet', async () => {
     const user = userEvent.setup();
     renderCompanion();
     await ready();
@@ -442,7 +442,7 @@ describe('when the assistant does not work', () => {
     await ready();
 
     await user.type(screen.getByRole('textbox'), 'Something I should not lose.');
-    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
 
     expect(
       await screen.findByText(/something went wrong while interpreting that/i),
@@ -462,13 +462,17 @@ describe('when the assistant does not work', () => {
     await ready();
 
     await user.type(screen.getByRole('textbox'), 'A first attempt.');
-    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
 
     // A 503 is a different situation from a failure. Retrying into the same answer would be
-    // pointless, so the copy does not offer it — it offers the questions instead.
+    // pointless, so the copy does not offer it.
     expect(await screen.findByText(/switched off/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
-    expect(screen.getByRole('link', { name: /the questions/i })).toBeInTheDocument();
+
+    // There is still a way into the questions, and there is exactly one of it. The error
+    // says where it is rather than putting a second copy of the link directly above the
+    // first — a page that repeats its own way out reads as though it is apologising.
+    expect(screen.getAllByRole('link', { name: /^the questions$/i })).toHaveLength(1);
   });
 
   it('never leaves a person without a way to the questions', async () => {
@@ -479,7 +483,7 @@ describe('when the assistant does not work', () => {
     await ready();
 
     await user.type(screen.getByRole('textbox'), 'Anything.');
-    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
     await screen.findByText(/something went wrong/i);
 
     // More than one way out, and always present.
@@ -505,7 +509,7 @@ describe('when the assistant does not work', () => {
     await ready();
 
     await user.type(screen.getByRole('textbox'), 'I do not want to be here any more.');
-    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
 
     // The reply is in the transcript, and the page says what to do next.
     expect(
@@ -535,7 +539,7 @@ describe('when the assistant does not work', () => {
     await ready();
 
     await user.type(screen.getByRole('textbox'), 'What medication should I take?');
-    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
 
     await screen.findAllByText(/I cannot give therapy, diagnose anything/i);
     // A redirect is not an ending. Somebody can still say what they are looking for.
@@ -561,20 +565,20 @@ describe('when the assistant does not work', () => {
     await ready();
 
     await user.type(screen.getByRole('textbox'), 'What medication should I take?');
-    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
     await screen.findAllByText(/I cannot give therapy/i);
 
     await user.click(screen.getByRole('button', { name: /show me what you understood/i }));
 
     // The guard answered, so the extraction is empty by design rather than by failure, and
     // the page says that plainly instead of showing an error the person can do nothing about.
-    expect(await screen.findByText(/nothing in that i could place/i)).toBeInTheDocument();
+    expect(await screen.findByText(/nothing in that we could place/i)).toBeInTheDocument();
     expect(extract).toHaveBeenCalledOnce();
   });
 });
 
 describe('accessibility and layout', () => {
-  it('has one first-level heading, and a second for the suggestions', async () => {
+  it('has one first-level heading, and a second for the understanding', async () => {
     const user = userEvent.setup();
     renderCompanion();
     await ready();
@@ -582,12 +586,12 @@ describe('accessibility and layout', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
 
     await user.type(screen.getByRole('textbox'), 'A thought about work.');
-    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
     await screen.findByText('What is the harder part of it?');
     await user.click(screen.getByRole('button', { name: /show me what you understood/i }));
 
     expect(
-      await screen.findByRole('heading', { level: 2, name: /here’s what i heard/i }),
+      await screen.findByRole('heading', { level: 2, name: /what we understood/i }),
     ).toBeInTheDocument();
   });
 
@@ -604,42 +608,124 @@ describe('accessibility and layout', () => {
     expect(help?.textContent).toMatch(/enter sends it/i);
   });
 
-  it('refuses to send an empty message', async () => {
+  it('will not continue an empty page', async () => {
     const user = userEvent.setup();
     renderCompanion();
     await ready();
 
-    const send = screen.getByRole('button', { name: 'Send' });
+    const send = screen.getByRole('button', { name: /continue/i });
     expect(send).toHaveAttribute('aria-disabled', 'true');
 
     await user.type(screen.getByRole('textbox'), '   ');
-    expect(screen.getByRole('button', { name: 'Send' })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('button', { name: /continue/i })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 
-  it('does not let the speaker label run into the prose', async () => {
+  it('sets the conversation as a page, not as a log', async () => {
     const user = userEvent.setup();
     renderCompanion();
     await ready();
 
-    await user.type(screen.getByRole('textbox'), 'A thought.');
-    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.type(screen.getByRole('textbox'), 'A thought about work.');
+    await user.click(screen.getByRole('button', { name: /continue/i }));
     await screen.findByText('What is the harder part of it?');
 
-    // "ASSISTANT" is nine letterspaced capitals and is the widest thing a turn contains.
-    // It is beside the prose on a wide screen and above it on a narrow one, because 5.25rem
-    // of a 320px line is 29% for a label, and truncating it to "ASSISTA…" is worse than
-    // either. jsdom has no layout, so this asserts the arrangement rather than the
-    // geometry; the journey script measures the real thing at all four widths.
-    const row = screen.getByText('What is the harder part of it?').closest('div');
-    const classes = row?.className ?? '';
+    const journal = screen.getByRole('list', { name: /written so far/i });
 
-    expect(classes).toMatch(/grid-cols-1/);
-    expect(classes).toMatch(/sm:grid-cols-\[5\.25rem_1fr\]/);
-    // And nothing clips the label.
-    expect(classes).not.toMatch(/truncate/);
+    /*
+     * Nothing in the journal is a box.
+     *
+     * A transcript tells its two parties apart with tinted panels, alternating alignment and
+     * a name on each — and every one of those marks says *messaging app*, which is the one
+     * thing this page is not. So: no background, and no border, anywhere inside it.
+     *
+     * Asserted on the class list rather than on computed style, because jsdom does not
+     * compute the properties this cares about and a green tick from a string comparison is
+     * the honest version of the check.
+     */
+    for (const node of Array.from(journal.querySelectorAll('*'))) {
+      // One deliberate exception: the short clay rule that marks a reflection as a note in
+      // the margin. It is hidden from assistive technology, and a mark rather than a box.
+      if (node.getAttribute('aria-hidden') === 'true') continue;
+
+      const marked = /(^|\s)(bg-|rounded|shadow)/.test(node.className);
+      const edged = /(^|\s)border(?:-[trblxy])?-/.test(node.className);
+
+      expect({ marked, edged }).toEqual({ marked: false, edged: false });
+    }
+
+    // Nobody is named. Two parties on a page means a conversation between equals, and
+    // somebody describing something difficult is not in one.
+    expect(journal.textContent).not.toMatch(/\b(you|assistant|it|we) (said|wrote|replied)\b/i);
+    expect(journal.textContent).not.toMatch(/\b(assistant|bot|ai)\b/i);
+
+    /*
+     * The three weights, told apart by type treatment alone.
+     *
+     * The question is the largest thing and the person's words are the warm centre, both in
+     * the display face; the reflection recedes into the body face, smaller and quieter. A
+     * transcript cannot express this, because in a transcript both sides are the same kind
+     * of object.
+     */
+    const prompt = screen.getByText(/you don’t need to know what kind of therapy/i);
+    const words = screen.getByText('A thought about work.');
+    const reflection = screen.getByText('What is the harder part of it?');
+
+    expect(prompt.className).toContain('font-display');
+    expect(words.className).toContain('font-display');
+
+    // What the person said outranks the question that asked for it. A question you have
+    // been asked is scaffolding; the answer is the building — and a page that sets the
+    // question larger is a page that is asking louder than it listens.
+    expect(words.className).toContain('text-subheading');
+    expect(prompt.className).toContain('text-lead');
+    expect(prompt.className).toContain('text-ink-muted');
+
+    // Separated by two signals rather than one, so the distinction survives a screen that
+    // cannot show colour.
+    expect(words.className).toContain('text-ink');
+    expect(words.className).not.toContain('text-ink-muted');
+
+    // The reflection is the one line not in the display face, and it is set smaller still.
+    expect(reflection.className).not.toContain('font-display');
+    expect(reflection.className).toContain('text-small');
   });
 
-  it('names the composer and its controls in the reading order', async () => {
+  it('offers writing starters before anything is written, and takes them away after', async () => {
+    const user = userEvent.setup();
+    renderCompanion();
+    await ready();
+
+    const starters = screen.getByRole('button', { name: /i’ve been feeling/i });
+    expect(starters).toBeInTheDocument();
+
+    // A starter completes a thought and sends nothing. A chip supplies an answer and
+    // pressing one transmits a decision, which is the wrong thing for this page.
+    await user.click(starters);
+    expect(screen.getByRole('textbox')).toHaveValue('I’ve been feeling…');
+    expect(turn).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    await screen.findByText('What is the harder part of it?');
+
+    // Somebody who has just found the right words does not need three ways to begin.
+    expect(screen.queryByRole('button', { name: /i’ve been feeling/i })).toBeNull();
+  });
+
+  it('names the stages of the journey rather than counting messages', () => {
+    renderCompanion();
+
+    const nav = screen.getByRole('navigation', { name: /where you are/i });
+
+    expect(nav).toBeInTheDocument();
+    expect(within(nav).getByText(/what brings you here/i)).toBeInTheDocument();
+    // No fraction, no "1 of 4" — the position is a name or it is nothing.
+    expect(nav.textContent).not.toMatch(/\d+\s*(of|\/)\s*\d+/);
+  });
+
+  it('puts the page first in the reading order, with no launcher before it', async () => {
     const user = userEvent.setup();
     renderCompanion();
     await ready();
@@ -660,7 +746,7 @@ describe('what leaves the browser', () => {
     await ready();
 
     await user.type(screen.getByRole('textbox'), 'Work has been stressful.');
-    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
     await screen.findByText('What is the harder part of it?');
 
     const url = lastRequestUrl();
@@ -676,10 +762,10 @@ describe('what leaves the browser', () => {
     await ready();
 
     await user.type(screen.getByRole('textbox'), 'Work has been stressful.');
-    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
     await screen.findByText('What is the harder part of it?');
     await user.click(screen.getByRole('button', { name: /show me what you understood/i }));
-    await screen.findByText('Here’s what I heard');
+    await screen.findByRole('heading', { level: 2, name: /what we understood/i });
 
     const calls = allRequestUrls();
 
@@ -700,7 +786,7 @@ describe('what leaves the browser', () => {
     await ready();
 
     await user.type(screen.getByRole('textbox'), 'Something worth keeping.');
-    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
     await screen.findByText('What is the harder part of it?');
     unmount();
 

@@ -6,10 +6,13 @@ import { Eyebrow } from '../../components/Eyebrow';
 import { LoadingNote } from '../../components/LoadingNote';
 import { QuietButton } from '../../components/QuietButton';
 import { TextLink } from '../../components/TextLink';
-import { ConversationLog } from '../../components/intake/ConversationLog';
-import { useScrollToNewest } from '../../components/intake/useScrollToNewest';
-import { Composer } from '../../components/intake/Composer';
-import { SuggestionList, type SuggestionVerdict } from '../../components/intake/SuggestionList';
+import { GuidedJourney } from '../../components/intake/GuidedJourney';
+import { Notepaper } from '../../components/intake/Notepaper';
+import { ReflectionJournal } from '../../components/intake/ReflectionJournal';
+import {
+  ReflectedUnderstanding,
+  type SuggestionVerdict,
+} from '../../components/intake/ReflectedUnderstanding';
 import {
   requestAiExtraction,
   requestAiTurn,
@@ -25,6 +28,7 @@ import {
   loadConversation,
   saveConversation,
 } from '../../lib/intake/conversation';
+import { promptsAreUseful, stageFor } from '../../lib/intake/journal';
 import { cx } from '../../lib/cx';
 import { usePageMeta } from '../../lib/usePageMeta';
 import { intakePath, paths } from '../../routes/paths';
@@ -101,7 +105,6 @@ export function IntakeCompanionPage() {
   // the greeting is on the page when the route opens and is read in the visual order.
   const [announcedUpTo, setAnnouncedUpTo] = useState(1);
 
-  const endOfLog = useScrollToNewest(messages.length);
   const inFlight = useRef<AbortController | null>(null);
 
   const remember = useCallback((next: readonly AiMessage[]) => {
@@ -275,107 +278,146 @@ export function IntakeCompanionPage() {
   const hintSuggestions =
     suggestions?.filter((entry) => entry.target.kind === 'availabilityHint') ?? [];
 
+  /*
+   * The stage, derived from what has been understood rather than counted.
+   *
+   * `stageFor` reads the transcript, so a person who writes one long answer and a person who
+   * writes four short ones are not treated differently. The stage follows the only thing the
+   * next step actually depends on.
+   */
+  const stage = stageFor({ messages, showingUnderstanding: suggestions !== null });
+
   return (
     <section className="wash-quiet">
-      <Container className="pt-10 pb-16 sm:pt-14">
-        <div className="max-w-2xl">
-          <Eyebrow>Optional · before the questions</Eyebrow>
-
-          <h1 className="font-display text-title mt-6 text-balance">Tell us in your own words.</h1>
-
-          <p className="text-lead text-ink-muted max-w-measure mt-5 text-pretty">
-            Write what has been going on, and we’ll show you what we understood before anything is
-            saved. You can keep what’s right, change what isn’t, or skip all of it and answer the
-            questions instead.
-          </p>
-        </div>
-
+      <Container className="pt-8 pb-16 sm:pt-12 lg:pt-16">
         {/*
-          The log and the composer share a narrower measure than the page heading. Prose is
-          comfortable at about sixty-five characters, and a conversation is prose.
+          Three columns, and not centred.
+
+          The left rail carries where you are and nothing else. The middle is the only thing
+          that moves. The right carries what happens to this, and is the one part that is
+          genuinely optional to look at. A single centred column would be the same page with
+          the context removed — which is precisely the shape a chat interface uses, and
+          precisely why this does not.
+
+          `minmax(0, 33rem)` rather than a fixed width so the prose column can be narrower
+          than its maximum without the rails closing over it, and the third track takes the
+          slack, which leaves the whole composition sitting slightly left of centre.
         */}
-        <div className="mt-10 max-w-2xl sm:mt-12">
-          <ConversationLog messages={messages} announcedUpTo={announcedUpTo} />
+        <div className="lg:grid lg:grid-cols-[12rem_minmax(0,33rem)_minmax(14rem,1fr)] lg:gap-12 xl:gap-16">
+          {/* Left: the journey. Hidden rather than reflowed — a sidebar of stage names
+              beside a page of prose competes with the prose. */}
+          <div className="hidden lg:block">
+            <GuidedJourney current={stage} variant="rail" />
+          </div>
 
-          {pending && (
-            // A `div`, because `LoadingNote` is a `p` and a paragraph cannot contain one.
-            <div className="border-line border-t py-6">
-              <LoadingNote>Making sense of that.</LoadingNote>
+          <div className="min-w-0">
+            {/* The same rail, as a row, for every width that cannot afford the column. */}
+            <GuidedJourney current={stage} variant="row" className="mb-10 lg:hidden" />
+
+            <header>
+              <Eyebrow>Optional · before the questions</Eyebrow>
+
+              {/*
+                The opening is a page title, not a message. There is no "Hi, I'm an
+                assistant" and no product announcing itself, because the first thing a
+                person meets here should be a thought about their own situation rather than
+                a piece of software introducing itself.
+              */}
+              <h1 className="font-display text-title mt-6 text-balance">
+                Let’s start somewhere simple.
+              </h1>
+
+              {/*
+                The lead says only what the page itself can say, which is what *this* is
+                rather than what the conversation is about. The "you don't need the
+                vocabulary" line belongs to the assistant, and belongs once — having it here
+                too put two near-identical sentences in the first screenful, one of them a
+                page talking and one of them the page asking.
+              */}
+              <p className="text-lead text-ink-muted max-w-measure mt-5 text-pretty">
+                Nothing here is decided for you. Take as long as you like, stop whenever you want,
+                and change anything later.
+              </p>
+            </header>
+
+            {/* The page: what was asked, what was written, what was heard back. */}
+            <div className="mt-12">
+              <ReflectionJournal messages={messages} announcedUpTo={announcedUpTo} />
             </div>
-          )}
 
-          {turnError !== null && <TurnError error={turnError} onRetry={() => setTurnError(null)} />}
+            {pending && (
+              <div className="mt-8">
+                <LoadingNote>Making sense of that.</LoadingNote>
+              </div>
+            )}
 
-          {!unavailable && (
-            <div className="border-line border-t py-7">
-              <Composer
-                onSend={send}
+            {turnError !== null && (
+              <TurnError error={turnError} onRetry={() => setTurnError(null)} />
+            )}
+
+            {unavailable ? (
+              <EndedNote onContinue={() => void navigate(intakePath('support'))} />
+            ) : (
+              <Notepaper
+                className="mt-12"
+                onContinue={send}
                 disabled={pending}
-                unavailableReason={
-                  turnError === null ? null : 'Your message is still here. Try sending it again.'
+                showStarters={promptsAreUseful(messages, '')}
+                guidance={
+                  turnError === null ? null : 'What you wrote is still here. Try sending it again.'
                 }
               />
-            </div>
-          )}
+            )}
 
-          {unavailable && <EndedNote onContinue={() => void navigate(intakePath('support'))} />}
-
-          {/*
-            The offer to summarise is a button, not an automatic step. Auto-summarising after
-            two messages would be the interface deciding the person has said enough, and
-            somebody who has just found the right words would have them interrupted.
-          */}
-          {!unavailable && messages.some((message) => message.role === 'user') && (
-            <div className="border-line border-t py-6">
-              <p className="text-small text-ink-muted max-w-measure text-pretty">
-                {suggestions === null
-                  ? 'When you feel you have said enough, we can read it back as answers to the questions.'
-                  : suggestions.length === 0
-                    ? 'There was nothing in that I could place against the questions. The questions themselves may serve you better.'
-                    : 'Does that sound right?'}
-              </p>
-
-              {suggestions === null ? (
-                <p className="mt-3">
-                  <QuietButton onClick={askForSuggestions} disabled={pending}>
-                    Show me what you understood
-                  </QuietButton>
+            {/*
+              The offer to read it back is a line of text with a word in it, not a step. The
+              interface deciding somebody has said enough — after two messages, say — would
+              interrupt exactly the moment somebody has just found the right words.
+            */}
+            {!unavailable && messages.some((message) => message.role === 'user') && (
+              <div className="mt-10">
+                <p className="text-small text-ink-muted max-w-measure text-pretty">
+                  {suggestions === null
+                    ? 'When you feel you have said enough, we can read it back as answers to the questions.'
+                    : suggestions.length === 0
+                      ? 'There was nothing in that we could place against the questions. The questions themselves may serve you better.'
+                      : 'Here is what we understood. Does that sound right?'}
                 </p>
-              ) : (
-                <p className="mt-3 flex flex-wrap gap-x-5 gap-y-1">
+
+                <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1">
                   <QuietButton onClick={askForSuggestions} disabled={pending}>
-                    Read it again
+                    {suggestions === null ? 'Show me what you understood' : 'Read it again'}
                   </QuietButton>
                   <TextLink to={intakePath('support')}>Answer the questions myself</TextLink>
-                </p>
-              )}
-
-              {extractError !== null && (
-                // A `div` rather than a `p`, because `QuietButton` renders a button and a
-                // button inside a paragraph is invalid HTML — which React warns about now
-                // and which would be a hydration error in a future that hydrates this page.
-                <div className="text-small text-clay-700 mt-4" role="alert">
-                  <p>Something went wrong while reading that back. What you wrote is still here.</p>{' '}
-                  <QuietButton onClick={askForSuggestions}>Try again</QuietButton>
                 </div>
-              )}
-            </div>
-          )}
 
-          {suggestions !== null && (
-            <div className="mt-8">
-              <h2 className="font-display text-subheading text-ink">
-                {suggestions.length === 0 ? 'What I could place' : 'Here’s what I heard'}
-              </h2>
+                {extractError !== null && (
+                  // A `div`, because `QuietButton` renders a button and a button inside a
+                  // paragraph is invalid HTML — which React warns about now and which would
+                  // be a hydration error in a future that hydrates this page.
+                  <div className="text-small text-clay-700 mt-4" role="alert">
+                    <p>
+                      Something went wrong while reading that back. What you wrote is still here.
+                    </p>{' '}
+                    <QuietButton onClick={askForSuggestions}>Try again</QuietButton>
+                  </div>
+                )}
+              </div>
+            )}
 
-              <p className="text-small text-ink-muted max-w-measure mt-2 text-pretty">
-                Nothing has been saved yet. Keep what is right, or answer the questions yourself —
-                either way, you decide.
-              </p>
+            {suggestions !== null && (
+              <div className="arrive-understanding mt-14">
+                <h2 className="font-display text-heading text-ink">
+                  {suggestions.length === 0 ? 'What we could place' : 'What we understood'}
+                </h2>
 
-              {suggestions.length > 0 && (
-                <SuggestionList
-                  className="mt-6"
+                <p className="text-small text-ink-muted max-w-measure mt-3 text-pretty">
+                  Nothing has been saved yet. Keep what is right, or answer the questions yourself —
+                  either way, you decide.
+                </p>
+
+                <ReflectedUnderstanding
+                  className="mt-8"
                   suggestions={suggestions}
                   verdicts={verdicts}
                   onKeep={keep}
@@ -383,56 +425,84 @@ export function IntakeCompanionPage() {
                   onChange={change}
                   draft={draft}
                 />
-              )}
 
-              {/*
-                Rendered whatever the list holds. A person who said something the assistant
-                could not place, and got no suggestions back, needs to be told *that* — it is
-                the most useful sentence on the page for them, and burying it inside a block
-                that only appears with results would lose exactly the people who need it.
-              */}
-              <UnplacedNotes
-                className="mt-6"
-                notUnderstood={notUnderstood}
-                surplus={surplus}
-                vocabulary={vocabulary}
-              />
+                {/*
+                  Shown whatever the list holds. Somebody who said something we could not
+                  place, and got nothing back, needs to be told *that* — it is the most
+                  useful sentence on the page for them, and burying it inside a block that
+                  only appears with results would lose exactly those people.
+                */}
+                <UnplacedNotes
+                  className="mt-8"
+                  notUnderstood={notUnderstood}
+                  surplus={surplus}
+                  vocabulary={vocabulary}
+                />
 
-              {hintSuggestions.length > 0 && (
-                <AvailabilityHints suggestions={hintSuggestions} onApply={applyHint} />
-              )}
+                {hintSuggestions.length > 0 && (
+                  <AvailabilityHints suggestions={hintSuggestions} onApply={applyHint} />
+                )}
 
-              <div className="mt-8 flex flex-col items-start gap-4">
-                <ButtonLink to={intakePath('support')}>
-                  {keptCount > 0 ? 'Continue with these' : 'Answer the questions yourself'}
-                </ButtonLink>
-                <QuietButton onClick={startOver}>Clear this conversation</QuietButton>
+                {/*
+                  Loud when there is something to carry forward, quiet when there is not.
+
+                  A filled clay button is the strongest mark in the product, and spending it
+                  on *leaving* told a person who had just been understood that the way out
+                  mattered more than what they had understood. The reward gets the weight;
+                  the fallback gets a link, which is also what it is.
+                */}
+                <div className="mt-10 flex flex-col items-start gap-4">
+                  {keptCount > 0 ? (
+                    <ButtonLink to={intakePath('support')}>Continue with these</ButtonLink>
+                  ) : (
+                    <TextLink to={intakePath('support')}>Answer the questions yourself</TextLink>
+                  )}
+                  <QuietButton onClick={startOver}>Start again</QuietButton>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          <div ref={endOfLog} aria-hidden="true" className="h-px" />
+            {/*
+              The way out is always here, and it is the primary action whenever nothing
+              usable has come of the conversation. A companion that trapped somebody would be
+              a worse intake than the one it replaced.
+            */}
+            <div className="border-line mt-14 border-t pt-8">
+              <h2 className="text-label text-ink-muted uppercase">Or go to the questions</h2>
+              <p className="text-small text-ink-muted max-w-measure mt-3 text-pretty">
+                Seven short questions, one at a time. Anything understood above is already filled
+                in, and you can change all of it.
+              </p>
+              <p className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2">
+                <TextLink to={intakePath('support')}>The questions</TextLink>
+                <TextLink to={paths.start}>Back to the start</TextLink>
+              </p>
+            </div>
+          </div>
 
           {/*
-            The way out is always here, and it is the primary action whenever the assistant
-            has produced nothing usable. A companion that trapped somebody in a conversation
-            would be a worse intake than the one it replaced.
+            Right: what happens to this. The one part of the page that is genuinely
+            secondary, so it is the part that is smallest, quietest, and last in the reading
+            order on a narrow screen. Reassurance nobody can act on is noise; this is
+            reassurance that answers the question somebody actually has here, which is
+            whether this is going somewhere or into a void.
           */}
-          <div className="border-line mt-10 border-t pt-7">
-            <h2 className="text-label text-ink-muted uppercase">Or go straight to the questions</h2>
-            <p className="text-small text-ink-muted max-w-measure mt-2 text-pretty">
-              Seven short questions, one at a time. Anything the assistant suggested is already
-              filled in — you can change any of it.
-            </p>
-            <p className="mt-4">
-              <ButtonLink to={intakePath('support')} variant="quiet">
-                The questions
-              </ButtonLink>
-            </p>
-            <p className="mt-4">
-              <TextLink to={paths.start}>Back to the start</TextLink>
-            </p>
-          </div>
+          <aside className="mt-14 lg:sticky lg:top-28 lg:mt-32 lg:self-start">
+            <h2 className="text-label text-ink-faint font-medium uppercase">What happens here</h2>
+
+            <div className="text-small text-ink-muted mt-4 flex flex-col gap-4 text-pretty">
+              <p>
+                Nothing is saved while you write. What we understand becomes answers to the
+                questions, and you can change any of them before anything is sent.
+              </p>
+              <p>
+                This is not a clinical assessment and nothing here is a diagnosis. It is a way of
+                getting what you need in front of the right person.
+              </p>
+            </div>
+
+            <div aria-hidden="true" className="bg-clay-300 mt-8 h-px w-8" />
+          </aside>
         </div>
       </Container>
     </section>
@@ -444,38 +514,45 @@ function TurnError({ error, onRetry }: { readonly error: ApiError; readonly onRe
   const unavailable = error.status === 503;
 
   return (
-    <div className="border-line border-t py-6" role="alert">
+    <div className="mt-10" role="alert">
       <p className="text-body text-ink text-pretty">
         {unavailable
-          ? 'The conversation assistant is switched off.'
+          ? 'The conversation is switched off.'
           : 'Something went wrong while interpreting that.'}
       </p>
       <p className="text-small text-ink-muted mt-2 text-pretty">
         {unavailable
-          ? 'That’s okay. You can continue without it — the questions are below.'
-          : 'Your answers are still here.'}
+          ? 'That is okay. You can carry on without it — the way into the questions is at the foot of this page.'
+          : 'Your words are still here, and so is the way into the questions.'}
       </p>
 
       {!unavailable && (
-        <p className="mt-3 flex flex-wrap gap-x-5 gap-y-1">
+        <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-1">
           <QuietButton onClick={onRetry}>Try again</QuietButton>
-          <TextLink to={intakePath('support')}>The questions</TextLink>
-        </p>
+        </div>
       )}
     </div>
   );
 }
 
-/** The assistant has ended the conversation. The questions are the way on. */
+/**
+ * The conversation has ended, and a person is the right next step.
+ *
+ * The copy is the same sentence the guard itself uses, on purpose: the guard is what ended
+ * the conversation, and repeating its own words here is more honest than paraphrasing them
+ * into something warmer than what was said.
+ */
 function EndedNote({ onContinue }: { readonly onContinue: () => void }) {
   return (
-    <div className="border-line border-t py-7">
-      <h2 className="text-label text-ink-muted uppercase">Where you can go from here</h2>
-      <p className="text-body text-ink max-w-measure mt-3 text-pretty">
-        A person is the right thing here, not an assistant. The questions below will still get you
-        to the same place.
+    <div className="mt-12">
+      <h2 className="font-display text-subheading text-ink text-pretty">
+        A person is the right thing here.
+      </h2>
+      <p className="text-small text-ink-muted max-w-measure mt-3 text-pretty">
+        The questions below will still get you to the same place, and nothing you wrote has been
+        lost.
       </p>
-      <p className="mt-4">
+      <p className="mt-5">
         <Button onClick={onContinue}>Continue to the questions</Button>
       </p>
     </div>

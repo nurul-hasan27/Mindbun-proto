@@ -258,6 +258,79 @@
     }
   }
 
+  /* ---------------------------------------------------------------
+     The intake journal
+     Three arrivals, and nothing else. The interface's claim is that
+     nothing here is a machine thinking, so the motion is the motion of a
+     page being written rather than of a reply being generated: a line
+     fades up into place, it does not slide in from the side, and there is
+     no typing indicator anywhere on this route.
+
+     Each animation is `both` so the element holds its opening state until
+     the frame it is on, and the global `prefers-reduced-motion` block
+     below collapses all three to nothing — the same calm page, unmoving.
+     ---------------------------------------------------------------- */
+
+  .arrive-prompt {
+    animation: arrive-prompt 520ms var(--ease-gentle) both;
+  }
+
+  @keyframes arrive-prompt {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .arrive-words {
+    animation: arrive-words 560ms var(--ease-gentle) both;
+  }
+
+  @keyframes arrive-words {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  .arrive-reflection {
+    animation: arrive-reflection 480ms var(--ease-gentle) both;
+  }
+
+  @keyframes arrive-reflection {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .arrive-understanding {
+    animation: arrive-understanding 620ms var(--ease-gentle) both;
+  }
+
+  @keyframes arrive-understanding {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
   /* Underline that draws in from the left, for quiet in-page links. */
   .link-quiet {
     background-image: linear-gradient(currentColor, currentColor);
