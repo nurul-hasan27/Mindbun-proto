@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Why This Match">
+  <rect width="32" height="32" rx="8" fill="#F8F3EC" />
+  <path
+    d="M16 5.5c.72 5.9 4.6 9.78 10.5 10.5-5.9.72-9.78 4.6-10.5 10.5-.72-5.9-4.6-9.78-10.5-10.5C11.4 15.28 15.28 11.4 16 5.5Z"
+    fill="#96522F"
+  />
+</svg>

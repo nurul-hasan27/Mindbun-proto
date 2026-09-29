@@ -1,0 +1,60 @@
+import type { RouteObject } from 'react-router';
+import { SiteLayout } from '../layouts/SiteLayout';
+import { FeedbackPage } from '../pages/FeedbackPage';
+import { LandingPage } from '../pages/LandingPage';
+import { MatchingPage } from '../pages/MatchingPage';
+import { MatchingWorkspaceCasePage } from '../pages/MatchingWorkspaceCasePage';
+import { MatchingWorkspacePage } from '../pages/MatchingWorkspacePage';
+import { NotFoundPage } from '../pages/NotFoundPage';
+import { RecommendationPage } from '../pages/RecommendationPage';
+import { RematchPage } from '../pages/RematchPage';
+import { StartPage } from '../pages/StartPage';
+import { TherapistProfilePage } from '../pages/TherapistProfilePage';
+import { intakeRoutes } from '../pages/intake/routes';
+
+/**
+ * One route tree, shared by the app (browser router) and the tests (memory
+ * router), so what is tested is what ships.
+ *
+ * `/`, `/start`, the whole of `/intake`, and the recommendation → feedback →
+ * looking again → recommendation loop are all implemented. One journey route is
+ * still a deliberate placeholder: `/rematch` renders the shared
+ * `JourneyPlaceholder` and will grow into its own page when something needs a
+ * third pass. The splat route keeps deep links honest rather than silently landing
+ * on the home page.
+ */
+export const routeConfig: RouteObject[] = [
+  {
+    path: '/',
+    element: <SiteLayout />,
+    children: [
+      { index: true, element: <LandingPage /> },
+      { path: 'start', element: <StartPage /> },
+      // The intake brings its own nested routes, including the index that makes
+      // `/intake` the first question.
+      ...intakeRoutes,
+      { path: 'matching', element: <MatchingPage /> },
+      { path: 'recommendation', element: <RecommendationPage /> },
+      { path: 'feedback', element: <FeedbackPage /> },
+      { path: 'rematch', element: <RematchPage /> },
+
+      // Outside the client journey on purpose: a profile is something a
+      // recommendation will point at, and it is reached from there rather than
+      // from the journey itself. The journey indicator is hidden here too.
+      { path: 'therapists/:id', element: <TherapistProfilePage /> },
+
+      // The internal reviewer's tool, at the edge of the tree and outside the journey.
+      // Unauthenticated in this prototype, and documented as such — see
+      // `docs/human-matching.md`.
+      //
+      // Outside the journey is a routing decision, not a security boundary: this is one
+      // single-page application, so the code below is in the client's bundle and anybody who
+      // types the path can open it. What it buys is that nothing in the client journey
+      // leads here, so a person going through the intake is never shown it.
+      { path: 'matching-workspace', element: <MatchingWorkspacePage /> },
+      { path: 'matching-workspace/:matchId', element: <MatchingWorkspaceCasePage /> },
+
+      { path: '*', element: <NotFoundPage /> },
+    ],
+  },
+];

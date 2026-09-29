@@ -1,0 +1,38 @@
+# Local PostgreSQL for Why This Match.
+#
+# One service, one volume, one database (plus a test database created by the
+# init script on first boot). Nothing else is needed: no admin UI, no proxy,
+# no extra infrastructure.
+#
+#   docker compose up -d          start
+#   docker compose down           stop, keeping data
+#   docker compose down -v        stop and delete the data
+#   docker compose ps             check health
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: why-this-match-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wtm
+      POSTGRES_PASSWORD: wtm
+      POSTGRES_DB: why_this_match
+      # Sensible defaults for a development machine.
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Creates the test database alongside the development one.
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U wtm -d why_this_match']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  postgres-data:
+    name: why-this-match-postgres-data

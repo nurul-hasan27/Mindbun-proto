@@ -1,0 +1,471 @@
+# Design system
+
+Everything in this document is implemented in one place:
+[`apps/web/src/styles/index.css`](../apps/web/src/styles/index.css). Components reference tokens,
+never raw values, so the whole product can be retuned from that single file.
+
+---
+
+## 1. Philosophy
+
+The product sits between two failure modes. On one side is the clinical software that greets
+people with forms, scores, and dashboards. On the other is the marketplace that turns therapy into
+browsing a catalogue of strangers. This system is built to avoid both.
+
+Five principles, in priority order:
+
+1. **Calm before clever.** Nothing moves, glows, or pulses to prove that it works. Restraint is
+   what makes an interface feel safe.
+2. **Editorial, not promotional.** The visual language comes from print: a serif with a voice,
+   generous measure, hairline rules, real whitespace, and a hierarchy that can be read at a glance.
+3. **Warm, never cute.** Warm neutrals carry almost all of the interface. Clay is used with intent,
+   for a single accent per view. Nothing is saturated, neon, or gradient-lit.
+4. **Space is a feature.** Whitespace does the separating that boxes, borders, and shadows would
+   otherwise do. Where a surface is genuinely needed, one quiet panel is used — not a grid of them.
+5. **The person is not a customer.** Copy is written as one human to another. No urgency, no
+   conversion language, no "AI-powered", no fake numbers.
+
+### What is deliberately absent
+
+Glassmorphism · neon or saturated colour · purple/blue "AI" gradients · floating blobs ·
+generic stock or AI illustrations · emoji as UI · icon clutter · glowing buttons · drop shadows
+that look like plastic · dashboard layouts on the client · bouncing, parallax, or scroll-jacking
+animation · pricing, testimonials, FAQ, or statistics sections.
+
+## 2. Colour
+
+| Token            | Value      | Role                                                         |
+| ---------------- | ---------- | ------------------------------------------------------------ |
+| `canvas`         | `#F8F3EC`  | Page background: warm off-white                              |
+| `canvas-sunk`    | `#F2EBE1`  | Recessed bands (reserved)                                    |
+| `surface`        | `#FFFDF9`  | Panels, and the text colour on clay actions                  |
+| `surface-quiet`  | `#FBF6EF`  | Secondary surface (reserved)                                 |
+| `ink`            | `#2F2925`  | Primary text: earthy brown, never pure black                 |
+| `ink-muted`      | `#6C6259`  | Secondary text                                               |
+| `ink-faint`      | `#857A70`  | Decorative and large text **only** (3.6:1 — never body copy) |
+| `line`           | `#E7DDD3`  | Hairlines                                                    |
+| `line-strong`    | `#D9CBBC`  | Borders on quiet buttons                                     |
+| `clay-50 … 900`  | warm ramp  | The single accent family                                     |
+| `sage-100 … 700` | muted ramp | Positive / reassuring states (reserved for Phase 2)          |
+
+Clay ramp: `50 #FBF3ED` · `100 #F4E4D8` · `200 #E8D5C5` · `300 #D9B69C` · `400 #C98F68` ·
+`500 #B86F4A` · `600 #A85E37` · `700 #9E5832` · `800 #7E4227` · `900 #5F3019`
+
+Unused tokens are kept as a complete, documented scale for later phases. Tailwind v4 tree-shakes
+theme variables, so a token that nothing references costs nothing in the built CSS.
+
+### Contrast (WCAG 2.1)
+
+| Pair                                     | Ratio  | Verdict         |
+| ---------------------------------------- | ------ | --------------- |
+| `ink` on `canvas`                        | 12.6:1 | AAA             |
+| `ink-muted` on `canvas`                  | 5.5:1  | AA (body text)  |
+| `surface` on `clay-700` (primary button) | 5.3:1  | AA              |
+| `clay-700` on `canvas` (link hover)      | 5.3:1  | AA              |
+| `ink-faint` on `canvas`                  | 3.6:1  | Decorative only |
+| `sage-700` on `sage-100` (reserved)      | 5.1:1  | AA              |
+
+Focus rings use `clay-700` at 2px with a 3px offset, which clears 3:1 against both `canvas` and
+`surface`.
+
+### Colour rules
+
+- Text is `ink` or `ink-muted`. `ink-faint` is for labels at large sizes and hairlines.
+- `clay-700` is the only interactive fill. `clay-200/300` are for drawing, never for text.
+- `sage-*` exists for future positive states and is currently unused on purpose.
+- There is one theme. A dark mode was deliberately skipped: a half-considered dark theme would
+  dilute the warmth the product depends on.
+
+## 3. Typography
+
+Two families, both self-hosted (no third-party requests, no layout shift):
+
+- **Fraunces** (display) — a warm, slightly soft old-style serif. Headings, the wordmark, and
+  pull quotes. Set at weight 400 with optical sizing on; headings are never bold.
+- **Inter** (body/UI) — neutral, highly legible at small sizes. All running text, labels, and
+  controls.
+
+| Token             | Size                         | Line height | Tracking | Used for                       |
+| ----------------- | ---------------------------- | ----------- | -------- | ------------------------------ |
+| `text-display`    | `clamp(2.5rem, …, 4rem)`     | 1.06        | −0.022em | Landing headline only          |
+| `text-title`      | `clamp(1.875rem, …, 2.5rem)` | 1.16        | −0.018em | Page headlines                 |
+| `text-heading`    | 1.5rem                       | 1.28        | −0.012em | Section and list-item headings |
+| `text-subheading` | 1.1875rem                    | 1.45        | —        | Pull quotes                    |
+| `text-lead`       | 1.125rem                     | 1.65        | —        | Introductory paragraphs        |
+| `text-body`       | 1rem                         | 1.70        | —        | Body copy                      |
+| `text-small`      | 0.875rem                     | 1.6         | —        | Supporting copy, footer        |
+| `text-micro`      | 0.75rem                      | 1.5         | —        | Small captions                 |
+| `text-label`      | 0.75rem                      | 1.4         | 0.14em   | Uppercase eyebrows             |
+| `text-brand`      | 1.0625rem                    | 1.2         | −0.01em  | Wordmark                       |
+
+Rules:
+
+- Headings use `text-balance`; body copy uses `text-pretty`. Never `text-justify`.
+- Line length is capped by `max-w-measure` (62ch). The hero is allowed wider.
+- Bold is used sparingly: only `font-medium` on controls, labels, and the wordmark.
+- Headings stay expressive rather than large; the display size is the only 64px moment in the
+  product, and it appears once.
+
+## 4. Space, radii, shadows
+
+- **Spacing**: Tailwind's 4px-rooted scale, plus two rhythm tokens so page structure is consistent
+  across routes — `spacing-page` (horizontal gutter, `clamp(1.25rem, …, 2.75rem)`) and
+  `spacing-section` (vertical rhythm between sections, `clamp(4rem, …, 7.5rem)`).
+- **Layout**: one container, `max-w-6xl` (72rem) with the page gutter. Reading columns narrow to
+  `max-w-2xl` (32rem) for single-column moments.
+- **Radii**: `rounded-control` (10px) for buttons and inputs, `rounded-panel` (14px) for the one
+  surface that needs it. No pills, no fully rounded cards.
+- **Shadows**: `shadow-whisper` and `shadow-soft` — both warm-tinted (`rgb(47 41 37 / …)`) and
+  low contrast, so elevation reads as paper rather than plastic. No shadow is used for decoration,
+  only to lift an action or a surface off the page.
+
+## 5. Texture and surface
+
+- A single fixed **paper grain** layer (`.grain-layer`, SVG turbulence, 22% multiply) sits above
+  the page and ignores pointer events. It removes the flat, plasticky feel of pure CSS.
+- Two very soft warm radial lights are painted on `body`, anchored to the top of the document
+  (never `background-attachment: fixed`, which is unreliable on mobile Safari).
+- `.wash-quiet` adds a single soft light behind focused, single-column moments such as `/start`.
+
+## 6. Components
+
+Only what the product actually needs. Each is small, single-purpose, and token-driven.
+
+| Component                   | Notes                                                                               |
+| --------------------------- | ----------------------------------------------------------------------------------- |
+| `Container`                 | The one page container; `as` lets a section be semantic                             |
+| `Eyebrow`                   | Small letterspaced label; `as="h2"` when it introduces a section                    |
+| `Button`                    | A real `<button>`; `unavailable` marks a control that exists but is not yet ready   |
+| `ButtonLink`                | The same visual language, rendered as a real `<a>` via React Router                 |
+| `TextLink`                  | Navigation that behaves like text, with an underline that draws in from the left    |
+| `ArrowGlyph`                | A typographic arrow that leans 2px on hover — the only flourish an action gets      |
+| `Wordmark`                  | Name plus a four-point mark; the same shape as the favicon                          |
+| `UnderlineMark`             | One hand-drawn clay stroke, used once, under the promise the product makes          |
+| `OverlapMark`               | The product idea as a diagram: two circles, the shared area in between              |
+| `QuietButton`               | A real `<button>` in the same voice, for actions like "Try again"                   |
+| `JourneyIndicator`          | Six hairlines showing where you are. Decorative, never a link                       |
+| `JourneyPlaceholder`        | The shared shape of a step that does not exist yet, so five cannot drift apart      |
+| `Monogram`                  | A person's initials in a hairline ring. The product stores no photographs           |
+| `ChoiceOption`              | One answer: a native checkbox or radio wearing the row it sits in                   |
+| `ToggleAll`                 | A plain button that shows or hides a list, saying how much is behind it             |
+| `IntakeProgress`            | A part of the flow named in small capitals, and the hairlines showing where you are |
+| `ProfileSection`            | One labelled, hairline-divided block of a profile, with a real heading              |
+| `LoadingNote`               | One quiet line and a hairline that breathes. The loading state for the product.     |
+| `ErrorNote`                 | A plain-language title, one way forward, and the technical detail tucked away       |
+| `DevStatus`                 | Development-only proof that the client can reach the API. Never in a build.         |
+| `SiteHeader` / `SiteFooter` | A name, your position, and a footnote. Not chrome — a frame.                        |
+| `ReflectionJournal`         | A conversation set as a page: questions, words, reflections. See below              |
+| `Notepaper`                 | A writing area with a rule under it and a word for an arrow. See below              |
+| `GuidedJourney`             | Where you are, as a stage name. A rail on a wide screen, a row on a narrow one      |
+| `ReflectedUnderstanding`    | What was understood, as prose, with Keep / Change / Not quite underneath            |
+| `CaseSummaryPanel`          | The matcher's AI perspective. An offer, a summary, and a boundary. See below        |
+
+Three decisions worth stating:
+
+- **`Button`, `ButtonLink` and `QuietButton` are separate components.** Choosing the right element
+  for the job (action vs. navigation) is an accessibility decision, not a styling one.
+- **An unavailable action is `aria-disabled`, not `disabled`.** It stays focusable, so keyboard
+  and screen-reader users still discover that the step exists, and `aria-describedby` points at the
+  sentence that explains why it is not ready yet.
+- **The journey indicator is a position, not a progress bar.** It is not interactive, makes no
+  claim about how far along anyone is, and carries the same information as text for anyone who
+  cannot see the marks.
+
+### A conversation is not a chat log
+
+Phase 9 added a conversational intake, and the visual decision that mattered most was what
+**not** to build.
+
+Every convention a chat interface has — two columns, rounded tails, alternating alignment, a
+tinted bubble per side — is a way of saying _this is a messaging app_. This is not one. It is an
+interview that happens to be typed, and a question is answered better by a question than by a
+bubble. Somebody telling a stranger something difficult is not in a conversation with an equal,
+and a two-column layout asserts that they are whatever the words happen to say.
+
+So the conversation is **a page being written, not a list of utterances**, and three decisions
+follow from that.
+
+**A turn is not a message.** In a transcript every message is one visual object and the interface
+is a column of them; that is the shape, and the feeling, of talking to a machine. Here a turn is
+three things with three different weights:
+
+|                  | Set as                                                          | Because                                                                         |
+| ---------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| A **question**   | Fraunces, `text-lead`, `text-ink-muted`                         | It is being asked of somebody. It is not the subject.                           |
+| **The words**    | Fraunces, `text-subheading`, `text-ink`                         | What the person wrote is the subject, and the largest running text on the page. |
+| A **reflection** | Inter, `text-small`, `text-ink-muted`, behind a short clay rule | It is a note in the margin on what was just said.                               |
+
+Separated by size _and_ tone, so neither cue is carrying it alone and the distinction survives a
+screen that cannot show colour.
+
+The first version had this the other way round — the question a step _larger_ than the words —
+and a screenshot of it is what showed the problem: the page asked louder than it listened, and
+two roles in the same serif at the same weight were indistinguishable without reading them. The
+page now gets louder as a person invests in it.
+
+**Which kind of turn it is, is decided by what follows and what precedes.** An assistant turn is
+a question when somebody is going to answer it — either because a person follows it, or because it
+is the very first thing on the page. Both halves are needed: _followed by an answer_ alone puts a
+margin note above the first thing anybody reads, and _preceded by an answer_ alone turns every
+question in the middle into a reflection. `entriesFor` in `lib/intake/journal.ts` is that rule, as
+a pure function, so the composition can be tested without rendering it.
+
+**Whitespace separates turns, not rules.** Rules say _these are separate items in a list_;
+whitespace says _this is space in a page_. The gaps are asymmetric on purpose: a question sits
+close to the answer it is about to get, and a reflection sits further from both, because it is
+answering what came before rather than prompting what comes next.
+
+What is deliberately absent from the whole surface: a launcher bubble, a floating widget, a
+sparkle icon, a purple or blue accent, a glowing border, an emoji, and any panel that wears the
+word _AI_ as decoration. The assistant is referred to as _the assistant_ or _the conversation
+assistant_ in the interface, which is both more accurate and quieter than a label on a badge.
+
+### The writing area is a note, and progress is a journey
+
+**The chrome is the message.** A chat input is a rounded rectangle with a border, sitting at the
+bottom of a column, with a filled button beside it. Every one of those marks says _you are
+composing a message_ — and the person composing it is not, and this page has spent its whole
+composition telling them so. So `Notepaper` has no box. There is a ruled line under the text, the
+way a journal page is ruled, and the text sits on it. The action is a word and an arrow rather
+than a button: a filled button is a submission, and this is a page turning. It is still a real
+`<button>`, still focusable, still `aria-disabled` when there is nothing written — the affordance
+is quieter, not weaker. The line grows to fit what was written, so a paragraph is never scrolled
+inside a box while somebody is still writing it.
+
+**Writing prompts fill the page; they do not send it.** A starter is an unfinished sentence — _I've
+been feeling…_ — so it completes a thought rather than naming a topic. That is the whole difference
+between a writing prompt and a suggestion chip: a chip supplies an answer, and pressing one
+transmits a decision, which is the wrong thing for a page whose whole argument is that nothing is
+decided quickly. They appear only before anything has been written and disappear after, because
+somebody who has just found the right words has been told, quietly, that they have not started yet.
+
+**Position is a stage name, never a fraction.** `GuidedJourney` shows the parts of getting to know
+somebody, and only the part you are in is named. There is no _3 of 8_ anywhere, on screen or in the
+accessible text: a fraction is a position in a queue, and this is not a queue. The two
+arrangements have to agree with each other — the rail on a wide screen, the row on a narrow one —
+and a component that counted for one and named for the other would be describing two different
+journeys depending on the window. The rail is hidden below `lg` rather than reflowed: a sidebar of
+stage names beside a page of prose competes with the prose.
+
+**The layout is three columns and deliberately not centred.** The left rail carries where you are,
+the middle is the only thing that moves, and the right carries what happens to this. A single
+centred column is the same page with the context removed — which is exactly the shape a chat
+interface uses, and exactly why this does not use it. The right track has a `14rem` floor: at
+`1fr` the reassurance wrapped at about twenty-eight characters, which is not a measure.
+
+**The way onward is loud only when it is the reward.** A filled clay button is the strongest mark
+in the product, and spending it on _answer the questions yourself_ told a person who had just been
+understood that leaving mattered more than what they had understood. So when something has been
+kept the onward action is filled; when nothing has, it is a link, which is also what it is.
+
+Four more decisions, each found by looking at the rendered page:
+
+- **A suggestion is body-size serif, not heading-size.** Applying the Phase 8 rule — _large when
+  it is the subject of the page_ — the subject of `/intake/companion` is what the person wrote.
+  A suggestion is one line in it. Heading-size here would give the page five competing focal
+  points.
+- **The writing area carries the product's existing focus ring.** `.focus-within-ring`, which
+  exists for a control whose own box is invisible — and a stylesheet comment written for exactly
+  this case. The first version rolled its own `focus-within:border-*`, and that is only a shade of
+  a line away from the unfocused state, which is not something a keyboard user can rely on finding.
+- **The confidence hint is a phrase, not a meter.** "a possible read", "a long way from certain".
+  Three levels is what the assistant can actually distinguish; a fourth would be a number nobody
+  could defend, and a bar would be a chart, which this product does not have.
+- **The reading measure is the same as everywhere else.** `max-w-measure`, nothing wider. Prose is
+  comfortable at about sixty-five characters, and a conversational turn is prose.
+
+### The AI perspective is a panel, not a product
+
+The matcher's case summary is the second AI surface, and the rule that keeps it inside this
+language is the same one the workspace already follows: **the absences are what matter.**
+
+Absent: a chat anything, an input, a conversation, a floating control, a badge, a "copilot"
+framing, a gradient panel, and any number about a person. The panel has exactly one control when
+a summary is on screen — _write it again_ — because the only actions available are asking and
+not asking.
+
+Present: the same warm canvas, the same hairlines, the same serif heading, the same
+`eyebrow` + prose structure as every other section, the same loading line, the same error
+wording as the rest of the workspace.
+
+Two decisions worth recording:
+
+- **It is an offer, not a panel that loads.** "Write a summary" is a button, and the panel is
+  unremarkable until it is pressed. A summary that arrives on its own is a paragraph that says
+  what matters, sitting where a matcher reads first — which is how a second reading becomes the
+  first authority.
+- **An empty list is stated, not padded.** Where there are no genuine tradeoffs, the panel says
+  so in a sentence rather than rendering an empty section. A heading with nothing under it reads
+  as a loading failure.
+
+### Placeholders and empty states
+
+A step that does not exist yet says what the step will be **for**, never that it is "coming soon".
+The one honest sentence about the prototype's state is identical everywhere, so it never becomes a
+novelty or a running gag:
+
+> This step is not built yet. Nothing here is stored, and nothing is sent anywhere.
+
+### Error copy
+
+Error states never lead with a technical message. Each failure kind maps to a plain sentence and
+one useful action; the status code and internal detail live in a collapsed disclosure, and in the
+console. The product does not show `ERR_CONNECTION_REFUSED`, stack traces, or raw JSON to a visitor.
+
+### A question is the page
+
+The intake is the one place where a form could have taken over, and the whole design is a
+refusal of that. The rules:
+
+- **One question per screen**, as the `h1`, at display size. Everything else is sized to stay out
+  of its way.
+- **The label above it names the _part of the flow_** — "Getting to know what matters" — not the
+  question. Repeating the question in small capitals directly above itself is noise wearing the
+  same words twice.
+- **Choices are rows of text**, not cards in a grid. A hairline between them, a small square or
+  circle, and nothing else.
+- **A selected row is marked four ways** — a clay rule, a clay tint, a filled mark, and heavier
+  type — so the state survives being printed in black and white, and so a test can assert it
+  without inspecting a colour.
+- **No step counter in the body.** The hairlines show the shape of what is left; the count is in
+  the text alternative, where it is useful and nowhere else.
+- **The action is "Continue"** everywhere, and on the last question it becomes "Review what you
+  told us". Nothing on this screen promises a match, because there is not one to promise.
+
+### People are not entries
+
+A therapist profile is a person, and it has to work without the visual shorthand of a directory. So:
+no stock portrait — a monogram of their initials in a hairline ring, because no real therapist has
+agreed to have their image used here. No score, no rank, no reviews, no star rating, no "best match"
+badge. No chips or pills carrying attributes: an area of work is a line of text, and a label above a
+list is a heading rather than a caption. The only action on the page is a way back.
+
+Those absences are enforced by a test, so the page cannot quietly become a marketplace later.
+
+### An internal tool is not a dashboard
+
+Phase 7 added `/matching-workspace`, a surface for a person doing a job rather than a person
+choosing care. The rule that keeps it inside this design language is the same one the client pages
+follow, applied to a different subject: **the absences are what matter.**
+
+Absent: a sidebar, a KPI row, a chart, a badge, an analytics panel, a dense table, a stock-photo
+avatar, a gradient "AI copilot" panel, and any number about a person. The only figure on the queue is
+how many cases are waiting, and it is a sentence rather than a headline — "2 cases are waiting" is
+fine, a large number above a list is a dashboard, and a dashboard is a different product with
+different intentions towards the person reading it.
+
+Present: the same warm canvas, the same hairlines, the same serif headings, the same spacing scale,
+the same focus treatment, the same reduced-motion behaviour. Nothing is redeclared. What differs is
+density — a matcher compares things, so a label and its value sit on one line — and that difference
+has exactly one new pattern behind it:
+
+> **A margin label and a content column.** `10rem` of small-caps label, then the content, with the
+> two collapsing to one column below `md`.
+
+That is the only new visual pattern the phase introduces, and it is a named component
+(`WorkspaceColumns`) rather than a `grid` written out per page — a pattern written in four places is
+a pattern that will be thinner in one of them.
+
+Two decisions inside it worth recording, because both were found by looking at the rendered page
+rather than at the code:
+
+- **A section with no margin label still starts its content in the second column.** A lone grid
+  child lands in the _first_ column, so "What this client needs" sat in the 10rem label column and
+  wrapped to three words. The page now has a single content edge.
+- **Rows, not a table.** A table is right for a queue at 1440px and wrong at 320px, where it is a
+  horizontal scroll. Rows that stack do both: fields become lines when narrow, a grid puts them in
+  columns when wide. Verified with no horizontal overflow at 320, 390, 834 and 1440.
+
+### Set a thing large when it is the subject of the page
+
+The one typographic rule Phase 8 had to add, and it came from a specific failure.
+
+The recommendation page set the therapist's areas of work in the display serif at heading
+size, one per line — directly beneath the evidence sentences, which are body-size sans. Three
+lines of display type read as three headings, so the section the page exists to communicate
+was handing its weight to a list of attributes. The profile page set the _same_ fields the
+same way, and there it read correctly, because there the person is the subject.
+
+So:
+
+|                            |                                            |
+| -------------------------- | ------------------------------------------ |
+| The subject of the page    | Large. The display serif, at heading size. |
+| Context for something else | Quiet. Body text, joined with middots.     |
+
+One rule, applied to two pages, and it puts the recommendation page in agreement with the
+reviewer's candidate card — which already rendered those fields as body text. Two surfaces
+showing one attribute list in two different type sizes is how they drift into disagreeing
+about what matters.
+
+The same reasoning governs the reviewer's queue: a row carries only what _differs_ between
+rows. Every row used to end with "Needs review", and since the endpoint returns undecided
+cases and nothing else, the status never varied — and a column that never varies teaches a
+matcher nothing while making every row longer to scan.
+
+## 7. Motion
+
+Motion exists to explain a change of page, never to entertain.
+
+| Interaction     | Treatment                                                               |
+| --------------- | ----------------------------------------------------------------------- |
+| Route change    | 420ms fade + 8px rise, `cubic-bezier(0.22, 0.61, 0.36, 1)`, played once |
+| Waiting         | A 1px hairline breathing between 35% and 100% opacity over 2.4s         |
+| Primary action  | 200ms colour + shadow, and a 1px lift on hover                          |
+| Quiet link      | 300ms underline draw from the left, 200ms colour                        |
+| Arrow           | 2px nudge on hover, 200ms                                               |
+| Everything else | No transition                                                           |
+
+Rules:
+
+- One entrance, and only on route change. It is played with the Web Animations API on the existing
+  element, never by remounting a page, so navigation cannot destroy state.
+- No bounce, no overshoot, no parallax, no scroll-triggered reveals, no skeleton shimmer.
+- Durations stay in the 160–420ms band; anything slower feels like waiting, which is the wrong
+  feeling for this product.
+- `prefers-reduced-motion: reduce` collapses every animation and transition to ~0ms, declared last
+  and unlayered so it wins over all utilities — and the route entrance is skipped in JavaScript as
+  well, so nothing is even scheduled.
+
+## 8. Accessibility
+
+- Semantic HTML first: `header`, `main`, `footer`, real headings in order, real lists, real
+  `figure`/`figcaption`, real `blockquote`. One `h1` per route.
+- A skip link is the first tab stop and becomes visible on focus.
+- Focus is always visible: `:focus-visible` outline in `clay-700`, 2px, 3px offset. Never removed.
+- Every link and button has an accessible name; decorative SVG is `aria-hidden`; the overlap
+  diagram carries a text description in a visually hidden caption.
+- Colour is never the only signal — the overlap diagram, the unavailable button, and the journey
+  hairlines each carry shape or text as well.
+- The journey indicator is decorative and duplicated as text ("Step 3 of 6: Finding a fit"), so it
+  is never the only way to know where you are.
+- Error states announce themselves with `role="alert"`, lead with plain words, and keep the
+  technical detail behind a disclosure.
+- Text meets AA at every size in the scale (see the contrast table).
+- Touch targets are at least 44px tall on mobile; the hero action is ~52px.
+- Layouts are designed at 320, 390, 834 and 1440px. Small screens get a different composition
+  (single column, tighter label tracking, narrower journey marks), not a shrunken desktop.
+- Respects `prefers-reduced-motion`. Dark mode is not offered; `color-scheme` is declared `light`
+  so form controls and scrollbars match the canvas.
+
+### The conversation, specifically
+
+- **The live region holds only what has just arrived.** `role="log"`, `aria-live="polite"`,
+  `aria-relevant="additions"`, and the region's contents are the messages after an index rather
+  than the whole transcript. A region containing everything re-announces the whole conversation
+  on every turn, which is worse than saying nothing.
+- **The greeting is not announced twice.** It is on the page when the route opens and read in the
+  visual order, so the first index is `1`.
+- **Enter sends, Shift+Enter breaks a line**, stated through the field's own
+  `aria-describedby` — available when the label is read rather than only to somebody hunting.
+- **Suggestions are toggles.** Real `<button>`s with `aria-pressed`, so a kept state is audible
+  and is not communicated by underline weight alone.
+- **A rejected suggestion stays on the page**, dimmed, with an Undo. A refusal you cannot take
+  back teaches people not to use the button.
+- **The composer is the first tab stop.** The greeting is prose, not a control, and a launcher
+  before it would be the wrong first thing to reach.
+- **A failed turn keeps the words.** The message is on screen, the error is announced with
+  `role="alert"`, and the way to the questions is always present — more than one way, so nobody
+  is left with a single control that did not work.
+- **The case summary panel announces a refusal** rather than leaving an absent section, which
+  reads as a page that failed to load.
