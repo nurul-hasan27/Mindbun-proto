@@ -154,9 +154,10 @@ Only what the product actually needs. Each is small, single-purpose, and token-d
 | `ErrorNote`                 | A plain-language title, one way forward, and the technical detail tucked away       |
 | `DevStatus`                 | Development-only proof that the client can reach the API. Never in a build.         |
 | `SiteHeader` / `SiteFooter` | A name, your position, and a footnote. Not chrome — a frame.                        |
-| `ConversationLog`           | A transcript as prose: one column, a quiet speaker marker, no bubbles. See below    |
-| `Composer`                  | One field and a send. Enter sends; Shift+Enter breaks a line                        |
-| `SuggestionList`            | One suggestion, its stated reason, and Keep / Change / Not quite                    |
+| `ReflectionJournal`         | A conversation set as a page: questions, words, reflections. See below              |
+| `Notepaper`                 | A writing area with a rule under it and a word for an arrow. See below              |
+| `GuidedJourney`             | Where you are, as a stage name. A rail on a wide screen, a row on a narrow one      |
+| `ReflectedUnderstanding`    | What was understood, as prose, with Keep / Change / Not quite underneath            |
 | `CaseSummaryPanel`          | The matcher's AI perspective. An offer, a summary, and a boundary. See below        |
 
 Three decisions worth stating:
@@ -181,22 +182,92 @@ interview that happens to be typed, and a question is answered better by a quest
 bubble. Somebody telling a stranger something difficult is not in a conversation with an equal,
 and a two-column layout asserts that they are whatever the words happen to say.
 
-So the transcript is **a single column of prose with a quiet speaker marker**, the way a
-transcript in a book is set: a `3.25rem` label column reading `You` or `Assistant`, then the turn
-at the reading measure. Hairlines between turns. No bubbles, no tails, no avatars, no timestamps,
-and no colour difference between speakers beyond the label itself.
+So the conversation is **a page being written, not a list of utterances**, and three decisions
+follow from that.
+
+**A turn is not a message.** In a transcript every message is one visual object and the interface
+is a column of them; that is the shape, and the feeling, of talking to a machine. Here a turn is
+three things with three different weights:
+
+|                  | Set as                                                          | Because                                                                         |
+| ---------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| A **question**   | Fraunces, `text-lead`, `text-ink-muted`                         | It is being asked of somebody. It is not the subject.                           |
+| **The words**    | Fraunces, `text-subheading`, `text-ink`                         | What the person wrote is the subject, and the largest running text on the page. |
+| A **reflection** | Inter, `text-small`, `text-ink-muted`, behind a short clay rule | It is a note in the margin on what was just said.                               |
+
+Separated by size _and_ tone, so neither cue is carrying it alone and the distinction survives a
+screen that cannot show colour.
+
+The first version had this the other way round — the question a step _larger_ than the words —
+and a screenshot of it is what showed the problem: the page asked louder than it listened, and
+two roles in the same serif at the same weight were indistinguishable without reading them. The
+page now gets louder as a person invests in it.
+
+**Which kind of turn it is, is decided by what follows and what precedes.** An assistant turn is
+a question when somebody is going to answer it — either because a person follows it, or because it
+is the very first thing on the page. Both halves are needed: _followed by an answer_ alone puts a
+margin note above the first thing anybody reads, and _preceded by an answer_ alone turns every
+question in the middle into a reflection. `entriesFor` in `lib/intake/journal.ts` is that rule, as
+a pure function, so the composition can be tested without rendering it.
+
+**Whitespace separates turns, not rules.** Rules say _these are separate items in a list_;
+whitespace says _this is space in a page_. The gaps are asymmetric on purpose: a question sits
+close to the answer it is about to get, and a reflection sits further from both, because it is
+answering what came before rather than prompting what comes next.
 
 What is deliberately absent from the whole surface: a launcher bubble, a floating widget, a
 sparkle icon, a purple or blue accent, a glowing border, an emoji, and any panel that wears the
 word _AI_ as decoration. The assistant is referred to as _the assistant_ or _the conversation
 assistant_ in the interface, which is both more accurate and quieter than a label on a badge.
 
-Three more decisions, each found by looking at the rendered page:
+### The writing area is a note, and progress is a journey
+
+**The chrome is the message.** A chat input is a rounded rectangle with a border, sitting at the
+bottom of a column, with a filled button beside it. Every one of those marks says _you are
+composing a message_ — and the person composing it is not, and this page has spent its whole
+composition telling them so. So `Notepaper` has no box. There is a ruled line under the text, the
+way a journal page is ruled, and the text sits on it. The action is a word and an arrow rather
+than a button: a filled button is a submission, and this is a page turning. It is still a real
+`<button>`, still focusable, still `aria-disabled` when there is nothing written — the affordance
+is quieter, not weaker. The line grows to fit what was written, so a paragraph is never scrolled
+inside a box while somebody is still writing it.
+
+**Writing prompts fill the page; they do not send it.** A starter is an unfinished sentence — _I've
+been feeling…_ — so it completes a thought rather than naming a topic. That is the whole difference
+between a writing prompt and a suggestion chip: a chip supplies an answer, and pressing one
+transmits a decision, which is the wrong thing for a page whose whole argument is that nothing is
+decided quickly. They appear only before anything has been written and disappear after, because
+somebody who has just found the right words has been told, quietly, that they have not started yet.
+
+**Position is a stage name, never a fraction.** `GuidedJourney` shows the parts of getting to know
+somebody, and only the part you are in is named. There is no _3 of 8_ anywhere, on screen or in the
+accessible text: a fraction is a position in a queue, and this is not a queue. The two
+arrangements have to agree with each other — the rail on a wide screen, the row on a narrow one —
+and a component that counted for one and named for the other would be describing two different
+journeys depending on the window. The rail is hidden below `lg` rather than reflowed: a sidebar of
+stage names beside a page of prose competes with the prose.
+
+**The layout is three columns and deliberately not centred.** The left rail carries where you are,
+the middle is the only thing that moves, and the right carries what happens to this. A single
+centred column is the same page with the context removed — which is exactly the shape a chat
+interface uses, and exactly why this does not use it. The right track has a `14rem` floor: at
+`1fr` the reassurance wrapped at about twenty-eight characters, which is not a measure.
+
+**The way onward is loud only when it is the reward.** A filled clay button is the strongest mark
+in the product, and spending it on _answer the questions yourself_ told a person who had just been
+understood that leaving mattered more than what they had understood. So when something has been
+kept the onward action is filled; when nothing has, it is a link, which is also what it is.
+
+Four more decisions, each found by looking at the rendered page:
 
 - **A suggestion is body-size serif, not heading-size.** Applying the Phase 8 rule — _large when
-  it is the subject of the page_ — the subject of `/intake/companion` is the conversation. A
-  suggestion is one line in it. Heading-size here would give the page five competing focal
+  it is the subject of the page_ — the subject of `/intake/companion` is what the person wrote.
+  A suggestion is one line in it. Heading-size here would give the page five competing focal
   points.
+- **The writing area carries the product's existing focus ring.** `.focus-within-ring`, which
+  exists for a control whose own box is invisible — and a stylesheet comment written for exactly
+  this case. The first version rolled its own `focus-within:border-*`, and that is only a shade of
+  a line away from the unfocused state, which is not something a keyboard user can rely on finding.
 - **The confidence hint is a phrase, not a meter.** "a possible read", "a long way from certain".
   Three levels is what the assistant can actually distinguish; a fourth would be a number nobody
   could defend, and a bar would be a chart, which this product does not have.

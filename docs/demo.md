@@ -76,6 +76,10 @@ explanation is generated from stored evidence rather than written beside it.
    > think part of what I'm struggling with is balancing what my family expects from me
    > with what I actually want. I'd rather talk things through than be given homework."
 
+   The page greets you without a message, offers three ways of starting a sentence
+   rather than three answers, and grows a line under your words as you write. Type
+   something, then click **Continue**.
+
    Then click **Show me what you understood**. Say the things that matter:
 
    > "Notice it read 'I'd rather talk things through than be given homework' as
@@ -91,11 +95,12 @@ explanation is generated from stored evidence rather than written beside it.
    it), reject one with **Not quite**, and continue into the questions. The kept answers are
    already filled in.
 
-   > "The conversation is a single column of prose with a quiet speaker marker. No
-   > bubbles, no tails, no avatars — every one of those is a way of saying 'this is a
-   > messaging app', and it is not one. Somebody telling a stranger something difficult
-   > is not in a conversation with an equal, and a two-column layout asserts that they
-   > are whatever the words happen to say."
+   > "The page is not a transcript. What you wrote is set largest, in the display face,
+   > at full ink; the questions asking for it sit a step back in the quieter ink; and
+   > each reply is a small sans-serif note in the margin, under a short clay rule. The
+   > page gets louder as you invest in it. No bubbles, no tails, no avatars, no
+   > speaker labels — every one of those is a way of saying 'this is a messaging app',
+   > and it is not one."
 
    > "And the last thing on the page is a link to the questions, with a second one
    > above it. There is no state in which somebody is trapped in the assistant."

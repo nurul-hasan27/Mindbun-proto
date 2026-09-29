@@ -238,6 +238,14 @@ mechanism: `applySuggestion` is a `switch` over the `target` the server sent, an
 ends in one of the draft's own `toggle*` functions. There is no path from a suggestion to
 `update()` that does not go through there, and no function in this codebase that would let one.
 
+**How a transcript becomes a page is a pure function, not JSX.** `lib/intake/journal.ts` holds
+`entriesFor`, `stageFor` and `promptsAreUseful` — the decisions that decide which turn is a
+question, where somebody is, and whether the writing prompts are still worth offering. They are
+functions of their input so the composition can be asserted without rendering, and a change to
+the visual treatment of a turn cannot quietly change which turns are treated as questions. This
+mattered during the redesign: the first rule made the greeting a reflection, and `journal.test.ts`
+caught it before the browser did.
+
 **The case summary is not state either.** `CaseSummaryPanel` holds one discriminated union —
 unrequested, loading, ready, refused — and that is all. It is a read of a derived view, refetched
 on demand, and there is nothing to keep in sync because nothing on the page changes when it

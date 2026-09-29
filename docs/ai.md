@@ -341,15 +341,27 @@ overwrite the one that was actually asked for.
   arrived**. A region containing the whole transcript re-announces the whole
   conversation on every turn.
 - Enter sends, Shift+Enter breaks a line, described through the field's own
-  `aria-describedby`.
+  `aria-describedby`. The action is a word and an arrow rather than a filled
+  button, but it is still a real `<button>`, still focusable, and still
+  `aria-disabled` when the page is empty.
+- The writing area carries `.focus-within-ring`, the product's existing
+  treatment for a control whose own box is invisible. Rolling a bespoke
+  `focus-within:border-*` instead gave only a shade of a line's difference —
+  not something a keyboard user can rely on finding.
+- The journey indicator names a stage and never a fraction, on screen or in
+  assistive text, in both of its arrangements. A fraction is a position in a
+  queue, and this is not a queue.
 - Suggestions use real `<button>`s with `aria-pressed`, so a kept state is
   audible and is not communicated by underline alone.
 - Rejections stay on the page, dimmed, with an Undo. A refusal you cannot take
   back teaches people not to use the button.
 - Errors use `role="alert"`, and a refused case summary is announced rather than
   left as a silently absent panel.
-- Reduced motion removes the transcript scroll animation; no other motion was
-  added.
+- Reduced motion removes the three arrival animations; verified in a real
+  browser by walking every element and counting anything still animating.
+- The `role="log"` region announces each turn as _Question_ or _Your words_ —
+  the two roles the page actually has. There is no third, because there is no
+  third.
 
 ---
 
@@ -359,7 +371,7 @@ overwrite the one that was actually asked for.
 | ------------------------------- | ------------------------------------------------ |
 | `docs/architecture.md`          | Where the AI layer sits in the system            |
 | `docs/frontend-architecture.md` | The companion page and the workspace panel       |
-| `docs/design-system.md`         | Why the conversation is not a chat log           |
+| `docs/design-system.md`         | Why the conversation is set as a page, not a log |
 | `docs/human-matching.md`        | Why the summary lives in the workspace namespace |
 | `docs/demo.md`                  | Walking through both surfaces                    |
 | **this file**                   | What AI may do, and what it may not              |
